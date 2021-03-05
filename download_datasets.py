@@ -1,4 +1,7 @@
 import os
+import sys
+import logging
+import threading
 
 from absl import app
 from absl import flags
@@ -23,6 +26,28 @@ flags.DEFINE_string(
 flags.mark_flag_as_required('s3_bucket_url')
 flags.mark_flag_as_required('file_path')
 
+class ProgressPercentage(object):
+  def __init__(self, client, bucket, object_name, file_path):
+    self._filename = file_path
+    self._size = self._get_content_size(client, bucket, object_name)
+    self._seen_so_far = 0
+    self._lock = threading.Lock()
+
+  def _get_content_size(self, client, bucket, object_name):
+    response = client.head_object(Bucket=bucket,
+                                  Key=object_name)['ResponseMetadata']
+    return int(response['HTTPHeaders']['content-length'])
+
+  def __call__(self, bytes_amount):
+    with self._lock:
+      self._seen_so_far += bytes_amount
+      percentage = (self._seen_so_far / self._size) * 100
+      sys.stdout.write(
+        "\r%s  %s / %s  (%.2f%%)" % (
+            self._filename, self._seen_so_far, self._size,
+            percentage))
+      sys.stdout.flush()
+
 def decode_s3_bucket_url(s3_bucket_url):
   s3_bucket_url = s3_bucket_url[len('s3://'):]
   keys = s3_bucket_url.split('/')
@@ -37,7 +62,9 @@ def download_from_s3(bucket, object_name, file_path, file_name=None):
   file_path = os.path.join(file_path, file_name)
 
   s3 = boto3.client('s3', config=Config(signature_version=UNSIGNED))
-  s3.download_file(bucket, object_name, file_path)
+  progress_callback = ProgressPercentage(s3, bucket, object_name, file_path)
+  s3.download_file(bucket, object_name, file_path,
+                   Callback=progress_callback)
 
 def main(_):
   bucket, object_name = decode_s3_bucket_url(FLAGS.s3_bucket_url)
