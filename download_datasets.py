@@ -8,6 +8,7 @@ from absl import flags
 import boto3
 from botocore import UNSIGNED
 from botocore.client import Config
+from boto3.s3.transfer import TransferConfig
 
 FLAGS = flags.FLAGS
 
@@ -22,6 +23,11 @@ flags.DEFINE_string(
 flags.DEFINE_string(
     'file_name', default=None,
     help=('The file name to save to. If not defined, it will use from url.'))
+
+flags.DEFINE_integer(
+    'max_concurrent_ops', default=10,
+    help=('Number of concurrent S3 API transfer operations. Tune it to adjust'
+          ' bandwidth usage.'))
 
 flags.mark_flag_as_required('s3_bucket_url')
 flags.mark_flag_as_required('file_path')
@@ -63,8 +69,9 @@ def download_from_s3(bucket, object_name, file_path, file_name=None):
 
   s3 = boto3.client('s3', config=Config(signature_version=UNSIGNED))
   progress_callback = ProgressPercentage(s3, bucket, object_name, file_path)
+  config = TransferConfig(max_concurrency=FLAGS.max_concurrent_ops)
   s3.download_file(bucket, object_name, file_path,
-                   Callback=progress_callback)
+                   Callback=progress_callback, Config=config)
 
 def main(_):
   bucket, object_name = decode_s3_bucket_url(FLAGS.s3_bucket_url)
