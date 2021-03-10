@@ -69,7 +69,7 @@ def create_tf_example(image,
   filename = image['file_name'].split('/')[-1]
   image_id = image['id']
 
-  image_path = os.path.join(dataset_base_dir, filename)
+  image_path = os.path.join(dataset_base_dir, image['file_name'])
   if not tf.io.gfile.exists(image_path):
     return None
 
@@ -161,7 +161,7 @@ def _create_inat_tf_record(annotations_file,
   annot_index = _get_annotations_index(json_data['annotations'])
   category_index = label_map_util.create_category_index(json_data['categories'])
 
-  split = annotations_file[:-len('.json')]
+  split = annotations_file.split('/')[-1][:-len('.json')]
   tfrecord_path = os.path.join(output_path, 'inat_%s.record' % split)
 
   if FLAGS.shufle_images:
