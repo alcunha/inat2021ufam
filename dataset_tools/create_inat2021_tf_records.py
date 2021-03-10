@@ -43,7 +43,7 @@ flags.DEFINE_string(
 )
 
 flags.DEFINE_integer(
-    'images_per_shard', default=1100,
+    'images_per_shard', default=1200,
     help=('Number of images per shard')
 )
 
