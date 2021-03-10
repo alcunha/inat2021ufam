@@ -158,7 +158,10 @@ def _create_inat_tf_record(annotations_file,
     json_data = json.load(json_file)
 
   images = json_data['images']
-  annot_index = _get_annotations_index(json_data['annotations'])
+  if 'annotations' in json_data:
+    annot_index = _get_annotations_index(json_data['annotations'])
+  else:
+    annot_index = {}
   category_index = label_map_util.create_category_index(json_data['categories'])
 
   split = annotations_file.split('/')[-1][:-len('.json')]
