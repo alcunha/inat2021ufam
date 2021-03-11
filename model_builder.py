@@ -38,6 +38,11 @@ efficientnet_b0_spec = get_default_specs()._replace(
   input_size=224
 )
 
+efficientnet_b2_spec = get_default_specs()._replace(
+  uri='https://tfhub.dev/tensorflow/efficientnet/b2/feature-vector/1',
+  input_size=260
+)
+
 efficientnet_b3_spec = get_default_specs()._replace(
   uri='https://tfhub.dev/tensorflow/efficientnet/b3/feature-vector/1',
   input_size=300
@@ -56,6 +61,7 @@ mobilenetv2_spec = get_default_specs()._replace(
 
 MODELS_SPECS = {
   'efficientnet-b0': efficientnet_b0_spec,
+  'efficientnet-b2': efficientnet_b2_spec,
   'efficientnet-b3': efficientnet_b3_spec,
   'efficientnet-b4': efficientnet_b4_spec,
   'mobilenetv2': mobilenetv2_spec,
