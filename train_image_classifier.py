@@ -65,7 +65,11 @@ def generate_lr_scheduler(hparams, steps_per_epoch):
 
   return scheduler
 
-def train_model(model, hparams, train_data_and_size, val_data_and_size):
+def train_model(model,
+                hparams,
+                train_data_and_size,
+                val_data_and_size,
+                strategy):
 
   train_data, train_size = train_data_and_size
   val_data, val_size = val_data_and_size
@@ -97,10 +101,10 @@ def train_model(model, hparams, train_data_and_size, val_data_and_size):
   if hparams.use_cosine_decay or hparams.warmup_steps > 0:
     callbacks.append(generate_lr_scheduler(hparams, steps_per_epoch))
 
-  optimizer = generate_optimizer(hparams)
-  loss_fn = generate_loss_fn(hparams)
-
-  model.compile(optimizer=optimizer, loss=loss_fn, metrics=['accuracy'])
+  with strategy.scope():
+    optimizer = generate_optimizer(hparams)
+    loss_fn = generate_loss_fn(hparams)
+    model.compile(optimizer=optimizer, loss=loss_fn, metrics=['accuracy'])
 
   return model.fit(
     train_data,

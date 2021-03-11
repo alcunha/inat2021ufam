@@ -173,7 +173,7 @@ def get_model(num_classes):
 
   return model
 
-def train_model(model, train_data_and_size, val_data_and_size):
+def train_model(model, train_data_and_size, val_data_and_size, strategy):
 
   if FLAGS.use_scaled_lr:
     lr = FLAGS.lr * FLAGS.batch_size / 256
@@ -199,7 +199,8 @@ def train_model(model, train_data_and_size, val_data_and_size):
     model,
     hparams,
     train_data_and_size,
-    val_data_and_size
+    val_data_and_size,
+    strategy
   )
 
   return history
@@ -255,14 +256,19 @@ def main(_):
   if FLAGS.num_classes is not None:
     num_classes = FLAGS.num_classes
 
-  model = get_model(num_classes)
+  strategy = tf.distribute.MirroredStrategy()
+  print('Number of devices: {}'.format(strategy.num_replicas_in_sync))
+
+  with strategy.scope():
+    model = get_model(num_classes)
 
   model.summary()
 
   history = train_model(
     model,
     train_data_and_size=(dataset, num_instances),
-    val_data_and_size=(val_dataset, val_num_instances)
+    val_data_and_size=(val_dataset, val_num_instances),
+    strategy=strategy
   )
 
 if __name__ == '__main__':
