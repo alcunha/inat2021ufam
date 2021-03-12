@@ -113,6 +113,12 @@ flags.DEFINE_integer(
     'epochs', default=10,
     help=('Number of epochs to training for'))
 
+flags.DEFINE_bool(
+    'fix_resolution', default=False,
+    help=('Apply the fix train-test resolution: fine-tune only the last layer'
+          ' and uses test data augmentation. Use the --input_size option'
+          ' to specify the test input resolution.'))
+
 if 'random_seed' not in list(FLAGS):
   flags.DEFINE_integer(
       'random_seed', default=42,
@@ -131,6 +137,7 @@ def build_csv_input_data(csv_file, is_training=False):
     data_dir=FLAGS.dataset_base_dir,
     batch_size=FLAGS.batch_size,
     is_training=is_training,
+    fix_resolution=FLAGS.fix_resolution,
     output_size=FLAGS.input_size,
     randaug_num_layers=FLAGS.randaug_num_layers,
     randaug_magnitude=FLAGS.randaug_magnitude,
@@ -150,6 +157,7 @@ def build_tfrecord_input_data(file_pattern, num_instances, is_training=False):
     num_classes=FLAGS.num_classes,
     num_instances=num_instances,
     is_training=is_training,
+    fix_resolution=FLAGS.fix_resolution,
     output_size=FLAGS.input_size,
     randaug_num_layers=FLAGS.randaug_num_layers,
     randaug_magnitude=FLAGS.randaug_magnitude,
@@ -163,6 +171,7 @@ def get_model(num_classes):
     model_name=FLAGS.model_name,
     num_classes=num_classes,
     input_size=FLAGS.input_size,
+    freeze_layers=FLAGS.fix_resolution,
     seed=FLAGS.random_seed
   )
 

@@ -38,6 +38,7 @@ class CSVInputProcessor:
               data_dir,
               batch_size,
               is_training=False,
+              fix_resolution=False,
               output_size=224,
               resize_with_pad=False,
               num_classes=None,
@@ -50,6 +51,7 @@ class CSVInputProcessor:
     self.data_dir = data_dir
     self.batch_size = batch_size
     self.is_training = is_training
+    self.fix_resolution = fix_resolution
     self.output_size = output_size
     self.resize_with_pad = resize_with_pad
     self.num_classes = num_classes
@@ -88,11 +90,11 @@ class CSVInputProcessor:
 
     def _preprocess_image(image, label):
       image = preprocessing.preprocess_image(image,
-                                    output_size=self.output_size,
-                                    is_training=self.is_training,
-                                    resize_with_pad=self.resize_with_pad,
-                                    randaug_num_layers=self.randaug_num_layers,
-                                    randaug_magnitude=self.randaug_magnitude)
+                    output_size=self.output_size,
+                    is_training=(self.is_training and not self.fix_resolution),
+                    resize_with_pad=self.resize_with_pad,
+                    randaug_num_layers=self.randaug_num_layers,
+                    randaug_magnitude=self.randaug_magnitude)
 
       return image, label
 
@@ -114,6 +116,7 @@ class TFRecordWBBoxInputProcessor:
               num_instances,
               default_empty_label=0,
               is_training=False,
+              fix_resolution=False,
               output_size=224,
               resize_with_pad=False,
               randaug_num_layers=None,
@@ -124,6 +127,7 @@ class TFRecordWBBoxInputProcessor:
     self.file_pattern = file_pattern
     self.batch_size = batch_size
     self.is_training = is_training
+    self.fix_resolution = fix_resolution
     self.output_size = output_size
     self.resize_with_pad = resize_with_pad
     self.num_classes = num_classes
@@ -212,11 +216,11 @@ class TFRecordWBBoxInputProcessor:
 
     def _preprocess_image(image, label, _):
       image = preprocessing.preprocess_image(image,
-                                    output_size=self.output_size,
-                                    is_training=self.is_training,
-                                    resize_with_pad=self.resize_with_pad,
-                                    randaug_num_layers=self.randaug_num_layers,
-                                    randaug_magnitude=self.randaug_magnitude)
+                    output_size=self.output_size,
+                    is_training=(self.is_training and not self.fix_resolution),
+                    resize_with_pad=self.resize_with_pad,
+                    randaug_num_layers=self.randaug_num_layers,
+                    randaug_magnitude=self.randaug_magnitude)
 
       return image, label
 

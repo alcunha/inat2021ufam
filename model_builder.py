@@ -67,9 +67,9 @@ MODELS_SPECS = {
   'mobilenetv2': mobilenetv2_spec,
 }
 
-def _create_model_from_hub(specs, seed=None):
+def _create_model_from_hub(specs, freeze_layers, seed=None):
   model = tf.keras.Sequential([
-    hub.KerasLayer(specs.uri, trainable=True),
+    hub.KerasLayer(specs.uri, trainable=(not freeze_layers)),
     tf.keras.layers.Dense(
         units=specs.classes,
         activation=specs.activation,
@@ -91,7 +91,7 @@ def _get_mobilenet_params(model_name):
 
   return alpha
 
-def _create_model_from_keras(specs, model_name, seed=None):
+def _create_model_from_keras(specs, model_name, freeze_layers, seed=None):
   if specs.uri == 'mobilenetv2':
     alpha = _get_mobilenet_params(model_name)
 
@@ -104,25 +104,34 @@ def _create_model_from_keras(specs, model_name, seed=None):
   else:
     raise RuntimeError('Model %s not implemented' % specs.uri)
 
-  x = tf.keras.layers.GlobalAveragePooling2D()(base_model.output)
-  output = tf.keras.layers.Dense(
+  inputs = tf.keras.Input(shape=(specs.input_size, specs.input_size, 3))
+
+  if freeze_layers:
+    base_model.trainable = False
+    x = base_model(inputs, training=False)
+  else:
+    x = base_model(inputs)
+
+  x = tf.keras.layers.GlobalAveragePooling2D()(x)
+  outputs = tf.keras.layers.Dense(
       specs.classes,
       activation=specs.activation,
       kernel_initializer=tf.keras.initializers.glorot_uniform(seed))(x)
-  model = tf.keras.models.Model(inputs=[base_model.input], outputs=[output])
+  model = tf.keras.models.Model(inputs=[inputs], outputs=[outputs])
 
   return model
 
-def _create_model_from_specs(specs, model_name, seed=None):
+def _create_model_from_specs(specs, model_name, freeze_layers, seed=None):
   if specs.type == 'tfhub':
-    return _create_model_from_hub(specs, seed)
+    return _create_model_from_hub(specs, freeze_layers, seed)
   else:
-    return _create_model_from_keras(specs, model_name, seed)
+    return _create_model_from_keras(specs, model_name, freeze_layers, seed)
 
 def create(model_name,
            num_classes,
            input_size=None,
            classifier_activation="softmax",
+           freeze_layers=False,
            seed=None):
 
   model_name_base = model_name.split('_')[0]
@@ -138,4 +147,4 @@ def create(model_name,
   if input_size is not None:
     specs = specs._replace(input_size=input_size)
 
-  return _create_model_from_specs(specs, model_name, seed)
+  return _create_model_from_specs(specs, model_name, freeze_layers, seed)
