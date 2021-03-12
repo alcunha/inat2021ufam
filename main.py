@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+import os
 import random
 
 from absl import app
@@ -34,8 +35,7 @@ flags.DEFINE_string(
 
 flags.DEFINE_integer(
     'num_training_instances', default=None,
-    help=('Number of training instances')
-)
+    help=('Number of training instances'))
 
 flags.DEFINE_string(
     'validation_files', default=None,
@@ -45,8 +45,7 @@ flags.DEFINE_string(
 
 flags.DEFINE_integer(
     'num_validation_instances', default=None,
-    help=('Number of validation instances')
-)
+    help=('Number of validation instances'))
 
 flags.DEFINE_string(
     'dataset_base_dir', default=None,
@@ -58,8 +57,7 @@ flags.DEFINE_integer(
 
 flags.DEFINE_bool(
     'use_label_smoothing', default=False,
-    help=('Apply Label Smoothing to the labels during training')
-)
+    help=('Apply Label Smoothing to the labels during training'))
 
 flags.DEFINE_integer(
     'batch_size', default=32,
@@ -81,6 +79,10 @@ flags.DEFINE_string(
     'model_dir', default=None,
     help=('Location of the model checkpoint files'))
 
+flags.DEFINE_string(
+    'load_checkpoint', default=None,
+    help=('Path to weights checkpoint to be loaded into the model'))
+
 flags.DEFINE_integer(
     'num_classes', default=None,
     help=('Number of classes to train the model on. If not passed, it will be'
@@ -88,40 +90,33 @@ flags.DEFINE_integer(
 
 flags.DEFINE_float(
     'lr', default=0.01,
-    help=('Initial learning rate')
-)
+    help=('Initial learning rate'))
 
 flags.DEFINE_float(
     'momentum', default=0,
-    help=('Momentum for SGD optimizer')
-)
+    help=('Momentum for SGD optimizer'))
 
 flags.DEFINE_bool(
     'use_scaled_lr', default=True,
-    help=('Scale the initial learning rate by batch size')
-)
+    help=('Scale the initial learning rate by batch size'))
 
 flags.DEFINE_bool(
     'use_cosine_decay', default=True,
-    help=('Apply cosine decay during training')
-)
+    help=('Apply cosine decay during training'))
 
 flags.DEFINE_float(
     'warmup_epochs', default=0.3,
     help=('Duration of warmp of learning rate in epochs. It can be a'
-          ' fractionary value as long will be converted to steps.')
-)
+          ' fractionary value as long will be converted to steps.'))
 
 flags.DEFINE_integer(
     'epochs', default=10,
-    help=('Number of epochs to training for')
-)
+    help=('Number of epochs to training for'))
 
 if 'random_seed' not in list(FLAGS):
   flags.DEFINE_integer(
       'random_seed', default=42,
-      help=('Random seed for reproductible experiments')
-  )
+      help=('Random seed for reproductible experiments'))
 
 flags.mark_flag_as_required('training_files')
 flags.mark_flag_as_required('model_dir')
@@ -263,6 +258,10 @@ def main(_):
     model = get_model(num_classes)
 
   model.summary()
+
+  if FLAGS.load_checkpoint is not None:
+    checkpoint_path = os.path.join(FLAGS.load_checkpoint, "ckp")
+    model.load_weights(checkpoint_path)
 
   history = train_model(
     model,
