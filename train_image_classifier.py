@@ -21,7 +21,7 @@ import lr_schedulers
 
 HParams = collections.namedtuple("HParams", [
     'lr', 'use_cosine_decay', 'warmup_steps', 'epochs', 'batch_size',
-    'momentum', 'use_label_smoothing', 'use_logits', 'model_dir'
+    'momentum', 'label_smoothing', 'use_logits', 'model_dir'
   ])
 
 def get_default_hparams():
@@ -32,7 +32,7 @@ def get_default_hparams():
     epochs=10,
     batch_size=32,
     momentum=0.0,
-    use_label_smoothing=False,
+    label_smoothing=0.0,
     use_logits=False,
     model_dir='/tmp/models/'
   )
@@ -45,7 +45,7 @@ def generate_optimizer(hparams):
 def generate_loss_fn(hparams):
   loss_fn = tf.keras.losses.CategoricalCrossentropy(
     from_logits=hparams.use_logits,
-    label_smoothing=hparams.use_label_smoothing
+    label_smoothing=hparams.label_smoothing
     )
 
   return loss_fn

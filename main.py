@@ -55,9 +55,10 @@ flags.DEFINE_integer(
     'input_size', default=224,
     help=('Input size of the model'))
 
-flags.DEFINE_bool(
-    'use_label_smoothing', default=False,
-    help=('Apply Label Smoothing to the labels during training'))
+flags.DEFINE_float(
+    'label_smoothing', default=0.1,
+    help=('When 0, no smoothing occurs. When > 0, we apply Label Smoothing to'
+          ' the labels during training using this value for parameter e.'))
 
 flags.DEFINE_integer(
     'batch_size', default=32,
@@ -196,7 +197,7 @@ def train_model(model, train_data_and_size, val_data_and_size, strategy):
     use_cosine_decay=FLAGS.use_cosine_decay,
     batch_size=FLAGS.batch_size,
     model_dir=FLAGS.model_dir,
-    use_label_smoothing=FLAGS.use_label_smoothing
+    label_smoothing=FLAGS.label_smoothing
   )
 
   history = train_image_classifier.train_model(
