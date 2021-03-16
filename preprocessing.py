@@ -37,7 +37,7 @@ FLAGS = flags.FLAGS
 
 def random_crop(image,
                 aspect_ratio_range=[0.75, 1.33],
-                area_range=[0.65, 1],
+                area_range=[0.08, 1],
                 min_object_covered=0.5,
                 max_attempts=100,
                 seed=0):
