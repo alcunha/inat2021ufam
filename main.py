@@ -120,6 +120,10 @@ flags.DEFINE_bool(
           ' and uses test data augmentation. Use the --input_size option'
           ' to specify the test input resolution.'))
 
+flags.DEFINE_bool(
+    'use_coordinates_inputs', default=False,
+    help=('Use coordinates as aditional input of the model'))
+
 if 'random_seed' not in list(FLAGS):
   flags.DEFINE_integer(
       'random_seed', default=42,
@@ -173,6 +177,7 @@ def get_model(num_classes):
     num_classes=num_classes,
     input_size=FLAGS.input_size,
     freeze_layers=FLAGS.fix_resolution,
+    use_coordinates_inputs=FLAGS.use_coordinates_inputs,
     seed=FLAGS.random_seed
   )
 

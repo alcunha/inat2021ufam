@@ -102,7 +102,21 @@ def _get_keras_base_model(specs, model_name):
 
   return base_model
 
-def _create_model_from_specs(specs, model_name, freeze_layers, seed=None):
+def _get_coordinates_base_model():
+  coordinates_model = tf.keras.Sequential([
+    tf.keras.layers.Dense(4),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.Activation('relu'),
+    tf.keras.layers.Dense(4),
+    tf.keras.layers.BatchNormalization(),
+    tf.keras.layers.Activation('relu'),
+    tf.keras.layers.Dropout(0.5)
+  ])
+
+  return coordinates_model
+
+def _create_model_from_specs(specs, model_name, freeze_layers,
+                             use_coordinates_inputs, seed=None):
   base_model = _get_keras_base_model(specs, model_name)
   image_input = tf.keras.Input(shape=(specs.input_size, specs.input_size, 3))
 
@@ -113,11 +127,21 @@ def _create_model_from_specs(specs, model_name, freeze_layers, seed=None):
     x = base_model(image_input)
 
   x = tf.keras.layers.GlobalAveragePooling2D()(x)
+
+  if use_coordinates_inputs:
+    coordinates_input = tf.keras.Input(shape=(2,))
+    coordinates_model = _get_coordinates_base_model()
+    y = coordinates_model(coordinates_input)
+    x = tf.keras.layers.concatenate([x, y])
+    inputs = [image_input, coordinates_input]
+  else:
+    inputs = [image_input]
+
   outputs = tf.keras.layers.Dense(
       specs.classes,
       activation=specs.activation,
       kernel_initializer=tf.keras.initializers.glorot_uniform(seed))(x)
-  model = tf.keras.models.Model(inputs=[image_input], outputs=[outputs])
+  model = tf.keras.models.Model(inputs=inputs, outputs=[outputs])
 
   return model
 
@@ -126,6 +150,7 @@ def create(model_name,
            input_size=None,
            classifier_activation="softmax",
            freeze_layers=False,
+           use_coordinates_inputs=False,
            seed=None):
 
   model_name_base = model_name.split('_')[0]
@@ -141,4 +166,5 @@ def create(model_name,
   if input_size is not None:
     specs = specs._replace(input_size=input_size)
 
-  return _create_model_from_specs(specs, model_name, freeze_layers, seed)
+  return _create_model_from_specs(specs, model_name, freeze_layers,
+                                  use_coordinates_inputs, seed)
