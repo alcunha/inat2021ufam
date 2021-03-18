@@ -15,47 +15,49 @@
 import collections
 
 import tensorflow as tf
-import tensorflow_hub as hub
 
 from utils import is_number
 
 ModelSpecs = collections.namedtuple("ModelSpecs", [
-    'uri', 'type', 'input_size', 'classes', 'activation'
+    'name', 'func', 'input_size', 'classes', 'activation'
   ])
-
 
 def get_default_specs():
   return ModelSpecs(
-    uri='https://tfhub.dev/tensorflow/efficientnet/b0/feature-vector/1',
-    type='tfhub',
+    name='efficientnet-b0',
+    func=tf.keras.applications.EfficientNetB0,
     input_size=224,
     classes=2,
     activation='softmax'
   )
 
 efficientnet_b0_spec = get_default_specs()._replace(
-  uri='https://tfhub.dev/tensorflow/efficientnet/b0/feature-vector/1',
+  name='efficientnet-b0',
+  func=tf.keras.applications.EfficientNetB0,
   input_size=224
 )
 
 efficientnet_b2_spec = get_default_specs()._replace(
-  uri='https://tfhub.dev/tensorflow/efficientnet/b2/feature-vector/1',
+  name='efficientnet-b2',
+  func=tf.keras.applications.EfficientNetB2,
   input_size=260
 )
 
 efficientnet_b3_spec = get_default_specs()._replace(
-  uri='https://tfhub.dev/tensorflow/efficientnet/b3/feature-vector/1',
+  name='efficientnet-b3',
+  func=tf.keras.applications.EfficientNetB3,
   input_size=300
 )
 
 efficientnet_b4_spec = get_default_specs()._replace(
-  uri='https://tfhub.dev/tensorflow/efficientnet/b4/feature-vector/1',
+  name='efficientnet-b4',
+  func=tf.keras.applications.EfficientNetB4,
   input_size=380
 )
 
 mobilenetv2_spec = get_default_specs()._replace(
-  uri='mobilenetv2',
-  type='keras',
+  name='mobilenetv2',
+  func=tf.keras.applications.MobileNetV2,
   input_size=224
 )
 
@@ -66,19 +68,6 @@ MODELS_SPECS = {
   'efficientnet-b4': efficientnet_b4_spec,
   'mobilenetv2': mobilenetv2_spec,
 }
-
-def _create_model_from_hub(specs, freeze_layers, seed=None):
-  model = tf.keras.Sequential([
-    hub.KerasLayer(specs.uri, trainable=(not freeze_layers)),
-    tf.keras.layers.Dense(
-        units=specs.classes,
-        activation=specs.activation,
-        kernel_initializer=tf.keras.initializers.glorot_uniform(seed))
-  ])
-
-  model.build([None, specs.input_size, specs.input_size, 3])
-
-  return model
 
 def _get_mobilenet_params(model_name):
   alpha = 1.0
@@ -91,41 +80,46 @@ def _get_mobilenet_params(model_name):
 
   return alpha
 
-def _create_model_from_keras(specs, model_name, freeze_layers, seed=None):
-  if specs.uri == 'mobilenetv2':
-    alpha = _get_mobilenet_params(model_name)
+def _get_keras_base_model(specs, model_name):
+  base_model = None
 
-    base_model = tf.keras.applications.MobileNetV2(
+  if specs.name == 'mobilenetv2':
+    alpha = _get_mobilenet_params(model_name)
+    base_model = specs.func(
       input_shape=(specs.input_size, specs.input_size, 3),
       alpha=alpha,
       include_top=False,
       weights='imagenet'
     )
+  elif specs.name.startswith('efficientnet'):
+    base_model = specs.func(
+      input_shape=(specs.input_size, specs.input_size, 3),
+      include_top=False,
+      weights='imagenet'
+    )
   else:
-    raise RuntimeError('Model %s not implemented' % specs.uri)
+    raise RuntimeError('Model %s not implemented' % specs.name)
 
-  inputs = tf.keras.Input(shape=(specs.input_size, specs.input_size, 3))
+  return base_model
+
+def _create_model_from_specs(specs, model_name, freeze_layers, seed=None):
+  base_model = _get_keras_base_model(specs, model_name)
+  image_input = tf.keras.Input(shape=(specs.input_size, specs.input_size, 3))
 
   if freeze_layers:
     base_model.trainable = False
-    x = base_model(inputs, training=False)
+    x = base_model(image_input, training=False)
   else:
-    x = base_model(inputs)
+    x = base_model(image_input)
 
   x = tf.keras.layers.GlobalAveragePooling2D()(x)
   outputs = tf.keras.layers.Dense(
       specs.classes,
       activation=specs.activation,
       kernel_initializer=tf.keras.initializers.glorot_uniform(seed))(x)
-  model = tf.keras.models.Model(inputs=[inputs], outputs=[outputs])
+  model = tf.keras.models.Model(inputs=[image_input], outputs=[outputs])
 
   return model
-
-def _create_model_from_specs(specs, model_name, freeze_layers, seed=None):
-  if specs.type == 'tfhub':
-    return _create_model_from_hub(specs, freeze_layers, seed)
-  else:
-    return _create_model_from_keras(specs, model_name, freeze_layers, seed)
 
 def create(model_name,
            num_classes,
