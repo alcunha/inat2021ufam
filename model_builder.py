@@ -110,7 +110,6 @@ def _get_coordinates_base_model():
     tf.keras.layers.Dense(4),
     tf.keras.layers.BatchNormalization(),
     tf.keras.layers.Activation('relu'),
-    tf.keras.layers.Dropout(0.5)
   ])
 
   return coordinates_model
