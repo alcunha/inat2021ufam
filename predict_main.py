@@ -57,11 +57,6 @@ flags.DEFINE_bool(
     help=('Use coordinates as aditional input of the model'))
 
 flags.DEFINE_string(
-    'test_annotations_file', default=None,
-    help=('File containing annotations for samples on COCO format. This file '
-          'is used to load image coordinates for test partition.'))
-
-flags.DEFINE_string(
     'submission_file_path', default=None,
     help=('File name to save predictions on iNat 2021 results format.'))
 
@@ -96,7 +91,6 @@ def build_input_data():
     num_classes=FLAGS.num_classes,
     num_instances=0,
     provide_instance_id=True,
-    annotations_file=FLAGS.test_annotations_file,
     provide_coordinates_input=FLAGS.use_coordinates_inputs
   )
 
@@ -122,10 +116,6 @@ def predict_classifier(model, dataset):
   return instance_ids, predictions
 
 def main(_):
-  if FLAGS.use_coordinates_inputs and FLAGS.test_annotations_file is None:
-    raise RuntimeError('To use --use_coordinates_inputs option you must specify'
-                       ' --test_annotations_file')
-
   dataset = build_input_data()
   model = _load_model()
   instance_ids, predictions = predict_classifier(model, dataset)

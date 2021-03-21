@@ -62,6 +62,12 @@ flags.mark_flag_as_required('annotations_file')
 flags.mark_flag_as_required('dataset_base_dir')
 flags.mark_flag_as_required('output_dir')
 
+def _coordinates_to_float(value):
+  if value is None:
+    return 0.0
+  else:
+    return float(value)
+
 def create_tf_example(image,
                       dataset_base_dir,
                       annotations,
@@ -79,6 +85,8 @@ def create_tf_example(image,
 
   height = image['height']
   width = image['width']
+  latitude = _coordinates_to_float(image['latitude'])/90
+  longitude = _coordinates_to_float(image['longitude'])/180
 
   xmins = []
   xmaxs = []
@@ -94,6 +102,8 @@ def create_tf_example(image,
   tf_example = tf.train.Example(features=tf.train.Features(feature={
       'image/height': dataset_util.int64_feature(height),
       'image/width': dataset_util.int64_feature(width),
+      'image/latitude': dataset_util.float_list_feature([latitude]),
+      'image/longitude': dataset_util.float_list_feature([longitude]),
       'image/filename': dataset_util.bytes_feature(filename.encode('utf8')),
       'image/source_id':
           dataset_util.bytes_feature(str(image_id).encode('utf8')),

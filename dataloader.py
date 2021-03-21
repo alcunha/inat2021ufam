@@ -32,24 +32,6 @@ flags.DEFINE_integer(
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 FLAGS = flags.FLAGS
 
-def _to_float(value):
-  if value is None:
-    return 0.0
-  else:
-    return float(value)
-
-def _generate_coordinates_idx(annotations_file, id_field):
-  with tf.io.gfile.GFile(annotations_file, 'r') as json_file:
-    json_data = json.load(json_file)
-
-  coordinates_index = {}
-  for image in json_data['images']:
-    image_id = int(image[id_field])
-    coordinates_index[image_id] = np.array([_to_float(image['latitude'])/90,
-                                            _to_float(image['longitude'])/180])
-
-  return coordinates_index
-
 class TFRecordWBBoxInputProcessor:
   def __init__(self,
               file_pattern,
@@ -65,7 +47,6 @@ class TFRecordWBBoxInputProcessor:
               randaug_magnitude=None,
               use_fake_data=False,
               provide_instance_id=False,
-              annotations_file=None,
               provide_coordinates_input=False,
               seed=None):
     self.file_pattern = file_pattern
@@ -81,13 +62,16 @@ class TFRecordWBBoxInputProcessor:
     self.use_fake_data = use_fake_data
     self.provide_instance_id = provide_instance_id
     self.provide_coordinates_input = provide_coordinates_input
-    self.coordinates_index = None
     self.preprocess_for_train = is_training and not use_eval_preprocess
     self.seed = seed
 
     self.feature_description = {
         'image/height': tf.io.FixedLenFeature((), tf.int64, default_value=1),
         'image/width': tf.io.FixedLenFeature((), tf.int64, default_value=1),
+        'image/latitude':
+            tf.io.FixedLenFeature((), tf.float32, default_value=0.0),
+        'image/longitude':
+            tf.io.FixedLenFeature((), tf.float32, default_value=0.0),
         'image/filename':
             tf.io.FixedLenFeature((), tf.string, default_value=''),
         'image/source_id':
@@ -107,13 +91,6 @@ class TFRecordWBBoxInputProcessor:
     self.bbox_handler = slim_example_decoder.BoundingBox(
                                              ['ymin', 'xmin', 'ymax', 'xmax'],
                                              'image/object/bbox/')
-    if provide_coordinates_input:
-      if annotations_file is None:
-        raise RuntimeError('To provide coordinates input, you must provide '
-                           'annotations_file.')
-      else:
-        self.coordinates_index = _generate_coordinates_idx(annotations_file,
-                                                           'id')
 
   def make_source_dataset(self):
 
@@ -159,6 +136,8 @@ class TFRecordWBBoxInputProcessor:
       bboxes = _parse_bboxes(features)
       label = _parse_label(features)
       instance_id = features['image/source_id']
+      latitude = features['image/latitude']
+      longitude = features['image/longitude']
 
       image = preprocessing.preprocess_image(image,
                     output_size=self.output_size,
@@ -168,13 +147,7 @@ class TFRecordWBBoxInputProcessor:
                     randaug_magnitude=self.randaug_magnitude)
 
       if self.provide_coordinates_input:
-        def _get_coords(instance_id):
-          instance_id = int(instance_id.numpy().decode('utf8'))
-          coords = self.coordinates_index[instance_id]
-          return coords
-
-        coordinates = tf.py_function(_get_coords, [instance_id],
-                                     Tout=tf.float32)
+        coordinates = tf.stack([latitude, longitude], 0)
         inputs = (image, coordinates)
       else:
         inputs = image

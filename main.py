@@ -125,16 +125,6 @@ flags.DEFINE_bool(
     'use_coordinates_inputs', default=False,
     help=('Use coordinates as aditional input of the model'))
 
-flags.DEFINE_string(
-    'train_annotations_file', default=None,
-    help=('File containing annotations for samples on COCO format. This file '
-          'is used to load image coordinates for train partition.'))
-
-flags.DEFINE_string(
-    'val_annotations_file', default=None,
-    help=('File containing annotations for samples on COCO format. This file '
-          'is used to load image coordinates for validation partition.'))
-
 if 'random_seed' not in list(FLAGS):
   flags.DEFINE_integer(
       'random_seed', default=42,
@@ -144,8 +134,7 @@ flags.mark_flag_as_required('training_files')
 flags.mark_flag_as_required('num_training_instances')
 flags.mark_flag_as_required('model_dir')
 
-def build_tfrecord_input_data(file_pattern, num_instances, annotations_file, 
-                              is_training=False):
+def build_tfrecord_input_data(file_pattern, num_instances, is_training=False):
   if FLAGS.num_classes is None:
     raise RuntimeError('To use TFRecords as input, you must specify'
                        ' --num_classes')
@@ -160,7 +149,6 @@ def build_tfrecord_input_data(file_pattern, num_instances, annotations_file,
     output_size=FLAGS.input_size,
     randaug_num_layers=FLAGS.randaug_num_layers,
     randaug_magnitude=FLAGS.randaug_magnitude,
-    annotations_file=annotations_file,
     provide_coordinates_input=FLAGS.use_coordinates_inputs,
     seed=FLAGS.random_seed,
   )
@@ -222,24 +210,15 @@ def main(_):
     raise RuntimeError('To apply Randaugment during training you must specify'
                        ' both --randaug_num_layers and --randaug_magnitude')
 
-  if FLAGS.use_coordinates_inputs and FLAGS.train_annotations_file is None:
-    raise RuntimeError('To use --use_coordinates_inputs option you must specify'
-                       ' --train_annotations_file')
-
   set_random_seeds()
 
   dataset, num_instances, num_classes = build_tfrecord_input_data(
     FLAGS.training_files,
     FLAGS.num_training_instances,
-    FLAGS.train_annotations_file,
     is_training=True
   )
 
   if FLAGS.validation_files is not None:
-    if FLAGS.use_coordinates_inputs and FLAGS.val_annotations_file is None:
-      raise RuntimeError('To use --use_coordinates_inputs option you must '
-                          'specify --val_annotations_file')
-
     if FLAGS.num_validation_instances is None:
       raise RuntimeError('Must specify --num_validation_instances when using'
                         'TFREcords for validation')
@@ -247,7 +226,6 @@ def main(_):
     val_dataset, val_num_instances, _ = build_tfrecord_input_data(
       FLAGS.validation_files,
       FLAGS.num_validation_instances,
-      FLAGS.val_annotations_file,
       is_training=False
     )
   else:
