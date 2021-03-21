@@ -59,6 +59,15 @@ flags.DEFINE_string(
     'dataset_base_dir', default=None,
     help=('Path to images dataset base directory when using a CSV file'))
 
+flags.DEFINE_bool(
+    'use_coordinates_inputs', default=False,
+    help=('Use coordinates as aditional input of the model'))
+
+flags.DEFINE_string(
+    'test_annotations_file', default=None,
+    help=('File containing annotations for samples on COCO format. This file '
+          'is used to load image coordinates for test partition.'))
+
 flags.DEFINE_integer(
     'log_frequence', default=500,
     help=('Log prediction every n steps'))
@@ -76,8 +85,9 @@ BATCH_SIZE = 1
 
 def _load_model():
   model = model_builder.create(model_name=FLAGS.model_name,
-                               num_classes=FLAGS.num_classes,
-                               input_size=FLAGS.input_size)
+                            num_classes=FLAGS.num_classes,
+                            input_size=FLAGS.input_size,
+                            use_coordinates_inputs=FLAGS.use_coordinates_inputs)
 
   checkpoint_path = os.path.join(FLAGS.ckpt_dir, "ckp")
   model.load_weights(checkpoint_path)
@@ -98,6 +108,8 @@ def build_input_data():
       output_size=FLAGS.input_size,
       num_classes=FLAGS.num_classes,
       provide_instance_id=True,
+      annotations_file=FLAGS.test_annotations_file,
+      provide_coordinates_input=FLAGS.use_coordinates_inputs
     )
   else:
     input_data = dataloader.TFRecordWBBoxInputProcessor(
@@ -108,6 +120,8 @@ def build_input_data():
       num_classes=FLAGS.num_classes,
       num_instances=0,
       provide_instance_id=True,
+      annotations_file=FLAGS.test_annotations_file,
+      provide_coordinates_input=FLAGS.use_coordinates_inputs
     )
 
   dataset, _, _ = input_data.make_source_dataset()
@@ -135,6 +149,10 @@ def predict_classifier(model, dataset):
   return labels, predictions
 
 def main(_):
+  if FLAGS.use_coordinates_inputs and FLAGS.test_annotations_file is None:
+    raise RuntimeError('To use --use_coordinates_inputs option you must specify'
+                       ' --test_annotations_file')
+
   dataset = build_input_data()
   model = _load_model()
   labels, predictions = predict_classifier(model, dataset)
