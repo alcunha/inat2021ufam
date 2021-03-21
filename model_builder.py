@@ -14,9 +14,17 @@
 
 import collections
 
+from absl import flags
 import tensorflow as tf
 
 from utils import is_number
+
+FLAGS = flags.FLAGS
+
+flags.DEFINE_integer(
+    'unfreeze_layers', default=0,
+    help=('Number of layers to unfreeze at the end of the image base model '
+          ' when freezing it for fine-tuning.'))
 
 ModelSpecs = collections.namedtuple("ModelSpecs", [
     'name', 'func', 'input_size', 'classes', 'activation'
@@ -110,27 +118,29 @@ def _get_coordinates_base_model():
     tf.keras.layers.Dense(4),
     tf.keras.layers.BatchNormalization(),
     tf.keras.layers.Activation('relu'),
+    tf.keras.layers.Dropout(0.2),
   ])
 
   return coordinates_model
 
 def _create_model_from_specs(specs, model_name, freeze_layers,
                              use_coordinates_inputs, seed=None):
-  base_model = _get_keras_base_model(specs, model_name)
+
   image_input = tf.keras.Input(shape=(specs.input_size, specs.input_size, 3))
+  base_model = _get_keras_base_model(specs, model_name)
+  base_model.trainable = not freeze_layers
+  if FLAGS.unfreeze_layers > 0:
+    for layer in base_model.layers[-FLAGS.unfreeze_layers:]:
+      layer.trainable = True
 
-  if freeze_layers:
-    base_model.trainable = False
-    x = base_model(image_input, training=False)
-  else:
-    x = base_model(image_input)
-
+  x = base_model(image_input, training=not freeze_layers)
   x = tf.keras.layers.GlobalAveragePooling2D()(x)
 
   if use_coordinates_inputs:
     coordinates_input = tf.keras.Input(shape=(2,))
     coordinates_model = _get_coordinates_base_model()
-    y = coordinates_model(coordinates_input)
+    coordinates_model.trainable = not freeze_layers
+    y = coordinates_model(coordinates_input, training=not freeze_layers)
     x = tf.keras.layers.concatenate([x, y])
     inputs = [image_input, coordinates_input]
   else:
