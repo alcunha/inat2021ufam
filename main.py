@@ -12,18 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+r"""Tool to train classifiers.
+
+Set the environment variable PYTHONHASHSEED to a reproducible value
+before you start the python process to ensure that the model trains
+or infers with prefect reproducibility
+"""
 import os
 import random
 
 from absl import app
 from absl import flags
 
+import numpy as np
 import tensorflow as tf
 
 import dataloader
 import model_builder
 import train_image_classifier
 import utils
+
+os.environ['TF_DETERMINISTIC_OPS'] = '1'
 
 FLAGS = flags.FLAGS
 
@@ -232,6 +241,7 @@ def train_model(model, train_data_and_size, val_data_and_size, strategy):
 
 def set_random_seeds():
   random.seed(FLAGS.random_seed)
+  np.random.seed(FLAGS.random_seed)
   tf.random.set_seed(FLAGS.random_seed)
 
 def main(_):

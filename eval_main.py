@@ -12,6 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+r"""Tool to evaluate classifiers.
+
+Set the environment variable PYTHONHASHSEED to a reproducible value
+before you start the python process to ensure that the model trains
+or infers with prefect reproducibility
+"""
 import os
 
 from absl import app
@@ -22,6 +28,8 @@ import tensorflow as tf
 
 import dataloader
 import model_builder
+
+os.environ['TF_DETERMINISTIC_OPS'] = '1'
 
 FLAGS = flags.FLAGS
 

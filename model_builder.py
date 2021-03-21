@@ -110,7 +110,7 @@ def _get_keras_base_model(specs, model_name):
 
   return base_model
 
-def _get_coordinates_base_model():
+def _get_coordinates_base_model(seed=None):
   coordinates_model = tf.keras.Sequential([
     tf.keras.layers.Dense(4),
     tf.keras.layers.BatchNormalization(),
@@ -118,7 +118,7 @@ def _get_coordinates_base_model():
     tf.keras.layers.Dense(4),
     tf.keras.layers.BatchNormalization(),
     tf.keras.layers.Activation('relu'),
-    tf.keras.layers.Dropout(0.2),
+    tf.keras.layers.Dropout(0.2, seed=seed),
   ])
 
   return coordinates_model
@@ -138,7 +138,7 @@ def _create_model_from_specs(specs, model_name, freeze_layers,
 
   if use_coordinates_inputs:
     coordinates_input = tf.keras.Input(shape=(2,))
-    coordinates_model = _get_coordinates_base_model()
+    coordinates_model = _get_coordinates_base_model(seed)
     coordinates_model.trainable = not freeze_layers
     y = coordinates_model(coordinates_input, training=not freeze_layers)
     x = tf.keras.layers.concatenate([x, y])
