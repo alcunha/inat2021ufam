@@ -38,9 +38,7 @@ FLAGS = flags.FLAGS
 
 flags.DEFINE_string(
     'training_files', default=None,
-    help=('A file pattern for TFRecord files OR a CSV file containing the list'
-          ' of images for training (CSV file must have two columns: filename'
-          ' and category id)'))
+    help=('A file pattern for TFRecord files'))
 
 flags.DEFINE_integer(
     'num_training_instances', default=None,
@@ -48,17 +46,11 @@ flags.DEFINE_integer(
 
 flags.DEFINE_string(
     'validation_files', default=None,
-    help=('A file pattern for TFRecord files OR a CSV file containing the list'
-          ' of images for evaluation (CSV file must have two columns: filename'
-          ' and category id)'))
+    help=('A file pattern for TFRecord files'))
 
 flags.DEFINE_integer(
     'num_validation_instances', default=None,
     help=('Number of validation instances'))
-
-flags.DEFINE_string(
-    'dataset_base_dir', default=None,
-    help=('Path to images dataset base directory when using a CSV file'))
 
 flags.DEFINE_integer(
     'input_size', default=224,
@@ -149,28 +141,8 @@ if 'random_seed' not in list(FLAGS):
       help=('Random seed for reproductible experiments'))
 
 flags.mark_flag_as_required('training_files')
+flags.mark_flag_as_required('num_training_instances')
 flags.mark_flag_as_required('model_dir')
-
-def build_csv_input_data(csv_file, annotations_file, is_training=False):
-  if FLAGS.dataset_base_dir is None:
-    raise RuntimeError('To use CSV files as input, you must specify'
-                       ' --dataset_base_dir')
-
-  input_data = dataloader.CSVInputProcessor(
-    csv_file=csv_file,
-    data_dir=FLAGS.dataset_base_dir,
-    batch_size=FLAGS.batch_size,
-    is_training=is_training,
-    use_eval_preprocess=FLAGS.fix_resolution,
-    output_size=FLAGS.input_size,
-    randaug_num_layers=FLAGS.randaug_num_layers,
-    randaug_magnitude=FLAGS.randaug_magnitude,
-    annotations_file=annotations_file,
-    provide_coordinates_input=FLAGS.use_coordinates_inputs,
-    seed=FLAGS.random_seed,
-  )
-
-  return input_data.make_source_dataset()
 
 def build_tfrecord_input_data(file_pattern, num_instances, annotations_file, 
                               is_training=False):
@@ -256,46 +228,28 @@ def main(_):
 
   set_random_seeds()
 
-  if FLAGS.training_files.endswith('.csv'):
-    dataset, num_instances, num_classes = build_csv_input_data(
-      FLAGS.training_files,
-      FLAGS.train_annotations_file,
-      is_training=True
-    )
-  else:
-    if FLAGS.num_training_instances is None:
-      raise RuntimeError('Must specify --num_training_instances when using'
-                         'TFREcords for training')
-
-    dataset, num_instances, num_classes = build_tfrecord_input_data(
-      FLAGS.training_files,
-      FLAGS.num_training_instances,
-      FLAGS.train_annotations_file,
-      is_training=True
-    )
+  dataset, num_instances, num_classes = build_tfrecord_input_data(
+    FLAGS.training_files,
+    FLAGS.num_training_instances,
+    FLAGS.train_annotations_file,
+    is_training=True
+  )
 
   if FLAGS.validation_files is not None:
     if FLAGS.use_coordinates_inputs and FLAGS.val_annotations_file is None:
       raise RuntimeError('To use --use_coordinates_inputs option you must '
                           'specify --val_annotations_file')
 
-    if FLAGS.validation_files.endswith('.csv'):
-      val_dataset, val_num_instances, _ = build_csv_input_data(
-        FLAGS.validation_files,
-        FLAGS.val_annotations_file,
-        is_training=False
-      )
-    else:
-      if FLAGS.num_validation_instances is None:
-        raise RuntimeError('Must specify --num_validation_instances when using'
-                          'TFREcords for validation')
+    if FLAGS.num_validation_instances is None:
+      raise RuntimeError('Must specify --num_validation_instances when using'
+                        'TFREcords for validation')
 
-      val_dataset, val_num_instances, _ = build_tfrecord_input_data(
-        FLAGS.validation_files,
-        FLAGS.num_validation_instances,
-        FLAGS.val_annotations_file,
-        is_training=False
-      )
+    val_dataset, val_num_instances, _ = build_tfrecord_input_data(
+      FLAGS.validation_files,
+      FLAGS.num_validation_instances,
+      FLAGS.val_annotations_file,
+      is_training=False
+    )
   else:
     val_dataset = None
     val_num_instances = 0

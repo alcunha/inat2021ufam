@@ -51,13 +51,7 @@ flags.DEFINE_string(
 
 flags.DEFINE_string(
     'test_files', default=None,
-    help=('A file pattern for TFRecord files OR a CSV file containing the list'
-          ' of images for test (CSV file must have two columns: filename'
-          ' and category id)'))
-
-flags.DEFINE_string(
-    'dataset_base_dir', default=None,
-    help=('Path to images dataset base directory when using a CSV file'))
+    help=('A file pattern for TFRecord files'))
 
 flags.DEFINE_bool(
     'use_coordinates_inputs', default=False,
@@ -95,34 +89,17 @@ def _load_model():
   return model
 
 def build_input_data():
-  if FLAGS.test_files.endswith('.csv'):
-    if FLAGS.dataset_base_dir is None:
-      raise RuntimeError('To use CSV files as input, you must specify'
-                         ' --dataset_base_dir')
-
-    input_data = dataloader.CSVInputProcessor(
-      csv_file=FLAGS.test_files,
-      data_dir=FLAGS.dataset_base_dir,
-      batch_size=BATCH_SIZE,
-      is_training=False,
-      output_size=FLAGS.input_size,
-      num_classes=FLAGS.num_classes,
-      provide_instance_id=True,
-      annotations_file=FLAGS.test_annotations_file,
-      provide_coordinates_input=FLAGS.use_coordinates_inputs
-    )
-  else:
-    input_data = dataloader.TFRecordWBBoxInputProcessor(
-      file_pattern=FLAGS.test_files,
-      batch_size=BATCH_SIZE,
-      is_training=False,
-      output_size=FLAGS.input_size,
-      num_classes=FLAGS.num_classes,
-      num_instances=0,
-      provide_instance_id=True,
-      annotations_file=FLAGS.test_annotations_file,
-      provide_coordinates_input=FLAGS.use_coordinates_inputs
-    )
+  input_data = dataloader.TFRecordWBBoxInputProcessor(
+    file_pattern=FLAGS.test_files,
+    batch_size=BATCH_SIZE,
+    is_training=False,
+    output_size=FLAGS.input_size,
+    num_classes=FLAGS.num_classes,
+    num_instances=0,
+    provide_instance_id=True,
+    annotations_file=FLAGS.test_annotations_file,
+    provide_coordinates_input=FLAGS.use_coordinates_inputs
+  )
 
   dataset, _, _ = input_data.make_source_dataset()
 

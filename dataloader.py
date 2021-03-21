@@ -16,7 +16,6 @@ import json
 from absl import flags
 
 import tensorflow as tf
-import pandas as pd
 import numpy as np
 from tf_slim import tfexample_decoder as slim_example_decoder
 
@@ -50,98 +49,6 @@ def _generate_coordinates_idx(annotations_file, id_field):
                                             _to_float(image['longitude'])/180])
 
   return coordinates_index
-
-class CSVInputProcessor:
-
-  def __init__(self,
-              csv_file,
-              data_dir,
-              batch_size,
-              is_training=False,
-              use_eval_preprocess=False,
-              output_size=224,
-              resize_with_pad=False,
-              num_classes=None,
-              randaug_num_layers=None,
-              randaug_magnitude=None,
-              use_fake_data=False,
-              provide_instance_id=False,
-              annotations_file=None,
-              provide_coordinates_input=False,
-              seed=None):
-    self.csv_file = csv_file
-    self.data_dir = data_dir
-    self.batch_size = batch_size
-    self.is_training = is_training
-    self.output_size = output_size
-    self.resize_with_pad = resize_with_pad
-    self.num_classes = num_classes
-    self.randaug_num_layers = randaug_num_layers
-    self.randaug_magnitude = randaug_magnitude
-    self.use_fake_data = use_fake_data
-    self.provide_instance_id = provide_instance_id
-    self.provide_coordinates_input = provide_coordinates_input
-    self.coordinates_index = None
-    self.preprocess_for_train = is_training and not use_eval_preprocess
-    self.seed = seed
-
-    if provide_coordinates_input:
-      if annotations_file is None:
-        raise RuntimeError('To provide coordinates input, you must provide '
-                           'annotations_file.')
-      else:
-        self.coordinates_index = _generate_coordinates_idx(annotations_file,
-                                                           'file_name')
-
-  def make_source_dataset(self):
-    csv_data = pd.read_csv(self.csv_file)
-    num_instances = len(csv_data)
-    if self.num_classes is None:
-      self.num_classes = len(csv_data.category.unique())
-
-    dataset = tf.data.Dataset.from_tensor_slices((
-      csv_data.file_name,
-      csv_data.category
-    ))
-
-    if self.is_training:
-      dataset = dataset.shuffle(len(csv_data), seed=self.seed)
-      dataset = dataset.repeat()
-
-    def _parse_single_example(file_name, label):
-      image = tf.io.read_file(self.data_dir + file_name)
-      image = tf.io.decode_jpeg(image, channels=3)
-      image = preprocessing.preprocess_image(image,
-                    output_size=self.output_size,
-                    is_training=self.preprocess_for_train,
-                    resize_with_pad=self.resize_with_pad,
-                    randaug_num_layers=self.randaug_num_layers,
-                    randaug_magnitude=self.randaug_magnitude)
-      label = tf.one_hot(label, self.num_classes)
-
-      if self.provide_coordinates_input:
-        def _get_coords(file_name):
-          coords = self.coordinates_index[file_name]
-          return coords
-
-        coordinates = tf.py_function(_get_coords, file_name, Tout=tf.float32)
-        inputs = (image, coordinates)
-      else:
-        inputs = image
-
-      if self.provide_instance_id:
-        return inputs, (label, file_name)
-
-      return inputs, label
-
-    dataset = dataset.map(_parse_single_example, num_parallel_calls=AUTOTUNE)
-    dataset = dataset.prefetch(buffer_size=AUTOTUNE)
-    dataset = dataset.batch(self.batch_size, drop_remainder=True)
-
-    if self.use_fake_data:
-      dataset.take(1).repeat()
-
-    return dataset, num_instances, self.num_classes
 
 class TFRecordWBBoxInputProcessor:
   def __init__(self,
