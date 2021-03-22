@@ -12,11 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-import json
 from absl import flags
 
 import tensorflow as tf
-import numpy as np
 from tf_slim import tfexample_decoder as slim_example_decoder
 
 import preprocessing
@@ -138,26 +136,27 @@ class TFRecordWBBoxInputProcessor:
       instance_id = features['image/source_id']
       latitude = features['image/latitude']
       longitude = features['image/longitude']
+      coordinates = tf.stack([latitude, longitude], 0)
 
+      return image, coordinates, bboxes, label, instance_id
+    dataset = dataset.map(_parse_single_example, num_parallel_calls=AUTOTUNE)
+
+    def _preprocess_image(image, coordinates, bboxes, label, instance_id):
       image = preprocessing.preprocess_image(image,
                     output_size=self.output_size,
                     is_training=self.preprocess_for_train,
                     resize_with_pad=self.resize_with_pad,
                     randaug_num_layers=self.randaug_num_layers,
                     randaug_magnitude=self.randaug_magnitude)
+      return image, coordinates, bboxes, label, instance_id
+    dataset = dataset.map(_preprocess_image, num_parallel_calls=AUTOTUNE)
 
-      if self.provide_coordinates_input:
-        coordinates = tf.stack([latitude, longitude], 0)
-        inputs = (image, coordinates)
-      else:
-        inputs = image
+    def _select_inputs_outputs(image, coordinates, _, label, instance_id):
+      inputs = (image, coordinates) if self.provide_coordinates_input else image
+      outputs = (label, instance_id) if self.provide_instance_id else label
+      return inputs, outputs
+    dataset = dataset.map(_select_inputs_outputs, num_parallel_calls=AUTOTUNE)
 
-      if self.provide_instance_id:
-        return inputs, (label, instance_id)
-
-      return inputs, label
-
-    dataset = dataset.map(_parse_single_example, num_parallel_calls=AUTOTUNE)
     dataset = dataset.prefetch(buffer_size=AUTOTUNE)
     dataset = dataset.batch(self.batch_size, drop_remainder=True)
 
