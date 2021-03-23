@@ -16,12 +16,14 @@ r"""Tool to evaluate classifiers.
 
 Set the environment variable PYTHONHASHSEED to a reproducible value
 before you start the python process to ensure that the model trains
-or infers with prefect reproducibility
+or infers with reproducibility
 """
 import os
+import random
 
 from absl import app
 from absl import flags
+import numpy as np
 from sklearn.metrics import (accuracy_score, confusion_matrix,
     classification_report)
 import tensorflow as tf
@@ -68,6 +70,11 @@ flags.DEFINE_integer(
 flags.DEFINE_string(
     'results_file', default=None,
     help=('File name where the results will be stored.'))
+
+if 'random_seed' not in list(FLAGS):
+  flags.DEFINE_integer(
+      'random_seed', default=42,
+      help=('Random seed for reproductible experiments'))
 
 flags.mark_flag_as_required('ckpt_dir')
 flags.mark_flag_as_required('num_classes')
@@ -122,7 +129,14 @@ def predict_classifier(model, dataset):
 
   return labels, predictions
 
+def set_random_seeds():
+  random.seed(FLAGS.random_seed)
+  np.random.seed(FLAGS.random_seed)
+  tf.random.set_seed(FLAGS.random_seed)
+
 def main(_):
+  set_random_seeds()
+
   dataset = build_input_data()
   model = _load_model()
   labels, predictions = predict_classifier(model, dataset)

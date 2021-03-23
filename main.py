@@ -16,7 +16,7 @@ r"""Tool to train classifiers.
 
 Set the environment variable PYTHONHASHSEED to a reproducible value
 before you start the python process to ensure that the model trains
-or infers with prefect reproducibility
+or infers with reproducibility
 """
 import os
 import random
