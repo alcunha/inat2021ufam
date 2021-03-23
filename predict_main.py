@@ -44,6 +44,10 @@ flags.DEFINE_integer(
     'num_classes', default=None,
     help=('Number of classes of the model.'))
 
+flags.DEFINE_integer(
+    'batch_size', default=32,
+    help=('Batch size used during prediction.'))
+
 flags.DEFINE_string(
     'ckpt_dir', default=None,
     help=('Location of the model checkpoint files'))
@@ -69,13 +73,12 @@ flags.mark_flag_as_required('submission_file_path')
 flags.mark_flag_as_required('num_classes')
 flags.mark_flag_as_required('test_files')
 
-BATCH_SIZE = 1
-
 def _load_model():
   model = model_builder.create(model_name=FLAGS.model_name,
                             num_classes=FLAGS.num_classes,
                             input_size=FLAGS.input_size,
-                            use_coordinates_inputs=FLAGS.use_coordinates_inputs)
+                            use_coordinates_inputs=FLAGS.use_coordinates_inputs,
+                            freeze_layers=True)
 
   checkpoint_path = os.path.join(FLAGS.ckpt_dir, "ckp")
   model.load_weights(checkpoint_path)
@@ -85,7 +88,7 @@ def _load_model():
 def build_input_data():
   input_data = dataloader.TFRecordWBBoxInputProcessor(
     file_pattern=FLAGS.test_files,
-    batch_size=BATCH_SIZE,
+    batch_size=FLAGS.batch_size,
     is_training=False,
     output_size=FLAGS.input_size,
     num_classes=FLAGS.num_classes,
@@ -106,8 +109,8 @@ def predict_classifier(model, dataset):
   for batch, metadata in dataset:
     pred = model(batch, training=False)
     _, instanceid = metadata
-    instance_ids.append(instanceid[0].numpy().decode('utf8'))
-    predictions.append(pred[0].numpy())
+    instance_ids += list(instanceid.numpy().astype('U13'))
+    predictions += list(pred.numpy())
 
     if count % FLAGS.log_frequence == 0:
       tf.compat.v1.logging.info('Finished eval step %d' % count)
