@@ -143,6 +143,13 @@ class TFRecordWBBoxInputProcessor:
       return image, coordinates, bboxes, label, instance_id
     dataset = dataset.map(_parse_single_example, num_parallel_calls=AUTOTUNE)
 
+    def _drop_coordinates(coordinates):
+      should_drop = tf.cast(tf.floor(tf.random.uniform(
+                                  [], seed=FLAGS.random_seed) + 0.5), tf.bool)
+      return tf.cond(should_drop,
+                     lambda: coordinates,
+                     lambda: tf.zeros(shape=coordinates.shape))
+
     def _preprocess_image(image, coordinates, bboxes, label, instance_id):
       image = preprocessing.preprocess_image(image,
                     output_size=self.output_size,
@@ -150,6 +157,8 @@ class TFRecordWBBoxInputProcessor:
                     resize_with_pad=self.resize_with_pad,
                     randaug_num_layers=self.randaug_num_layers,
                     randaug_magnitude=self.randaug_magnitude)
+      if self.is_training:
+        coordinates = _drop_coordinates(coordinates)
       return image, coordinates, bboxes, label, instance_id
     dataset = dataset.map(_preprocess_image, num_parallel_calls=AUTOTUNE)
 
