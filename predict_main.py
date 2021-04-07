@@ -97,6 +97,7 @@ def build_input_data():
     file_pattern=FLAGS.test_files,
     batch_size=FLAGS.batch_size,
     is_training=False,
+    batch_drop_remainder=False,
     output_size=FLAGS.input_size,
     num_classes=FLAGS.num_classes,
     num_instances=0,

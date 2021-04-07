@@ -46,6 +46,7 @@ class TFRecordWBBoxInputProcessor:
               use_fake_data=False,
               provide_instance_id=False,
               provide_coordinates_input=False,
+              batch_drop_remainder=True,
               seed=None):
     self.file_pattern = file_pattern
     self.batch_size = batch_size
@@ -61,6 +62,7 @@ class TFRecordWBBoxInputProcessor:
     self.provide_instance_id = provide_instance_id
     self.provide_coordinates_input = provide_coordinates_input
     self.preprocess_for_train = is_training and not use_eval_preprocess
+    self.batch_drop_remainder = batch_drop_remainder
     self.seed = seed
 
     self.feature_description = {
@@ -158,7 +160,8 @@ class TFRecordWBBoxInputProcessor:
     dataset = dataset.map(_select_inputs_outputs, num_parallel_calls=AUTOTUNE)
 
     dataset = dataset.prefetch(buffer_size=AUTOTUNE)
-    dataset = dataset.batch(self.batch_size, drop_remainder=True)
+    dataset = dataset.batch(self.batch_size,
+                            drop_remainder=self.batch_drop_remainder)
 
     if self.use_fake_data:
       dataset.take(1).repeat()
