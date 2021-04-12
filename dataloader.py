@@ -27,6 +27,10 @@ flags.DEFINE_integer(
     'suffle_buffer_size', default=10000,
     help=('Size of the buffer used to shuffle tfrecords'))
 
+flags.DEFINE_bool(
+    'use_coordinates_augment', default=False,
+    help=('Apply data augmentation to coordinates data'))
+
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 FLAGS = flags.FLAGS
 
@@ -157,7 +161,7 @@ class TFRecordWBBoxInputProcessor:
                     resize_with_pad=self.resize_with_pad,
                     randaug_num_layers=self.randaug_num_layers,
                     randaug_magnitude=self.randaug_magnitude)
-      if self.is_training:
+      if self.is_training and FLAGS.use_coordinates_augment:
         coordinates = _drop_coordinates(coordinates)
       return image, coordinates, bboxes, label, instance_id
     dataset = dataset.map(_preprocess_image, num_parallel_calls=AUTOTUNE)
