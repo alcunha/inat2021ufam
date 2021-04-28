@@ -16,6 +16,8 @@ import os
 import random
 import hashlib
 import json
+import datetime
+import calendar
 import contextlib2
 
 from absl import app
@@ -52,6 +54,10 @@ flags.DEFINE_bool(
     help=('Shufle images before to write to tfrecords')
 )
 
+flags.DEFINE_string(
+    'datetime_format', default='%Y-%m-%d %H:%M:%S+00:00',
+    help=('Datetime format used to convert to days to float'))
+
 if 'random_seed' not in list(FLAGS):
   flags.DEFINE_integer(
       'random_seed', default=42,
@@ -62,11 +68,11 @@ flags.mark_flag_as_required('annotations_file')
 flags.mark_flag_as_required('dataset_base_dir')
 flags.mark_flag_as_required('output_dir')
 
-def _coordinates_to_float(value):
-  if value is None:
-    return 0.0
-  else:
-    return float(value)
+def _date2float(date):
+  dt = datetime.datetime.strptime(date, FLAGS.datetime_format).timetuple()
+  year_days = 366 if calendar.isleap(dt.tm_year) else 365
+
+  return dt.tm_yday/year_days
 
 def create_tf_example(image,
                       dataset_base_dir,
@@ -85,8 +91,15 @@ def create_tf_example(image,
 
   height = image['height']
   width = image['width']
-  latitude = _coordinates_to_float(image['latitude'])/90
-  longitude = _coordinates_to_float(image['longitude'])/180
+  date = _date2float(image['date'])
+  if image['latitude'] is None:
+    latitude = 0.0
+    longitude = 0.0
+    valid = 0.0
+  else:
+    latitude = float(image['latitude'])/90.0
+    longitude = float(image['longitude'])/180.0
+    valid = 1.0
 
   xmins = []
   xmaxs = []
@@ -104,6 +117,8 @@ def create_tf_example(image,
       'image/width': dataset_util.int64_feature(width),
       'image/latitude': dataset_util.float_list_feature([latitude]),
       'image/longitude': dataset_util.float_list_feature([longitude]),
+      'image/valid': dataset_util.float_list_feature([valid]),
+      'image/date': dataset_util.float_list_feature([date]),
       'image/filename': dataset_util.bytes_feature(filename.encode('utf8')),
       'image/source_id':
           dataset_util.bytes_feature(str(image_id).encode('utf8')),
