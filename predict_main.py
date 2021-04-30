@@ -27,6 +27,7 @@ import numpy as np
 import tensorflow as tf
 
 import dataloader
+import geoprior
 import inatlib
 import model_builder
 
@@ -70,6 +71,22 @@ flags.DEFINE_integer(
     'log_frequence', default=500,
     help=('Log prediction every n steps'))
 
+flags.DEFINE_string(
+    'geo_prior_ckpt_dir', default=None,
+    help=('Location of the checkpoint files for the geo prior model'))
+
+flags.DEFINE_integer(
+    'geo_prior_input_size', default=6,
+    help=('Input size for the geo prior model'))
+
+flags.DEFINE_bool(
+    'use_bn_geo_prior', default=False,
+    help=('Include Batch Normalization to the geo prior model'))
+
+flags.DEFINE_integer(
+    'embed_dim', default=256,
+    help=('Embedding dimension for geo prior model'))
+
 if 'random_seed' not in list(FLAGS):
   flags.DEFINE_integer(
       'random_seed', default=42,
@@ -92,7 +109,27 @@ def _load_model():
 
   return model
 
+def _load_geo_prior_model():
+  if FLAGS.geo_prior_ckpt_dir is not None:
+    rand_sample_generator = dataloader.RandSpatioTemporalGenerator()
+
+    geo_prior_model = geoprior.FCNet(
+      num_inputs=FLAGS.geo_prior_input_size,
+      embed_dim=FLAGS.embed_dim,
+      num_classes=FLAGS.num_classes,
+      use_bn=FLAGS.use_bn_geo_prior,
+      rand_sample_generator=rand_sample_generator)
+
+    checkpoint_path = os.path.join(FLAGS.geo_prior_ckpt_dir, "ckp")
+    geo_prior_model.load_weights(checkpoint_path)
+
+    return geo_prior_model
+  else:
+    return None
+
 def build_input_data():
+  include_geo_data = FLAGS.geo_prior_ckpt_dir is not None
+
   input_data = dataloader.TFRecordWBBoxInputProcessor(
     file_pattern=FLAGS.test_files,
     batch_size=FLAGS.batch_size,
@@ -101,6 +138,8 @@ def build_input_data():
     output_size=FLAGS.input_size,
     num_classes=FLAGS.num_classes,
     num_instances=0,
+    provide_validity_info_output=include_geo_data,
+    provide_coord_date_encoded_input=include_geo_data,
     provide_instance_id=True,
     provide_coordinates_input=FLAGS.use_coordinates_inputs
   )
@@ -109,16 +148,37 @@ def build_input_data():
 
   return dataset
 
-def predict_classifier(model, dataset):
+def mix_predictions(cnn_preds, prior_preds, valid):
+  valid = tf.expand_dims(valid, axis=-1)
+  return cnn_preds*prior_preds*valid + (1 - valid)*cnn_preds
+
+def predict_w_geo_prior(batch, metadata, model, geo_prior_model):
+  cnn_input = batch[:-1]
+  prior_input = batch[-1]
+  _, valid, instanceid = metadata
+
+  cnn_preds = model(cnn_input, training=False)
+  prior_preds = geo_prior_model(prior_input, training=False)
+  preds = mix_predictions(cnn_preds, prior_preds, valid)
+
+  return instanceid, preds
+
+def predict_classifier(model, geo_prior_model, dataset):
   instance_ids = []
   predictions = []
   count = 0
 
   for batch, metadata in dataset:
-    pred = model(batch, training=False)
-    _, instanceid = metadata
+    if geo_prior_model is not None:
+      instanceid, preds = predict_w_geo_prior(batch,
+                                         metadata,
+                                         model,
+                                         geo_prior_model)
+    else:
+      preds = model(batch, training=False)
+      _, instanceid = metadata
     instance_ids += list(instanceid.numpy().astype('U13'))
-    predictions += list(pred.numpy())
+    predictions += list(preds.numpy())
 
     if count % FLAGS.log_frequence == 0:
       tf.compat.v1.logging.info('Finished eval step %d' % count)
@@ -136,7 +196,10 @@ def main(_):
 
   dataset = build_input_data()
   model = _load_model()
-  instance_ids, predictions = predict_classifier(model, dataset)
+  geo_prior_model = _load_geo_prior_model()
+  instance_ids, predictions = predict_classifier(model,
+                                                 geo_prior_model,
+                                                 dataset)
   inatlib.generate_submission(instance_ids,
                               predictions,
                               FLAGS.submission_file_path)
