@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-from absl import flags
+import math
 
+from absl import flags
 import tensorflow as tf
-from tf_slim import tfexample_decoder as slim_example_decoder
 
 import preprocessing
 
@@ -31,8 +31,35 @@ flags.DEFINE_bool(
     'use_coordinates_augment', default=False,
     help=('Apply data augmentation to coordinates data'))
 
+flags.DEFINE_string(
+    'loc_encode', default='encode_cos_sin',
+    help=('Encoding type for location coordinates'))
+
+flags.DEFINE_string(
+    'date_encode', default='encode_cos_sin',
+    help=('Encoding type for date'))
+
+flags.DEFINE_bool(
+    'use_date_feats', default=True,
+    help=('Include date features to the encoded coordinates inputs'))
+
 AUTOTUNE = tf.data.experimental.AUTOTUNE
 FLAGS = flags.FLAGS
+
+def _drop_coordinates(coordinates):
+  should_drop = tf.cast(tf.floor(tf.random.uniform(
+                              [], seed=FLAGS.random_seed) + 0.5), tf.bool)
+  return tf.cond(should_drop,
+                  lambda: coordinates,
+                  lambda: tf.zeros(shape=coordinates.shape))
+
+def _encode_feat(feat, encode):
+  if encode == 'encode_cos_sin':
+    return tf.sin(math.pi*feat), tf.cos(math.pi*feat)
+  else:
+    raise RuntimeError('%s not implemented' % encode)
+
+  return feat
 
 class TFRecordWBBoxInputProcessor:
   def __init__(self,
@@ -47,6 +74,8 @@ class TFRecordWBBoxInputProcessor:
               resize_with_pad=False,
               randaug_num_layers=None,
               randaug_magnitude=None,
+              provide_validity_info_output=False,
+              provide_coord_date_encoded_input=False,
               use_fake_data=False,
               provide_instance_id=False,
               provide_coordinates_input=False,
@@ -63,8 +92,10 @@ class TFRecordWBBoxInputProcessor:
     self.randaug_num_layers = randaug_num_layers
     self.randaug_magnitude = randaug_magnitude
     self.use_fake_data = use_fake_data
+    self.provide_validity_info_output = provide_validity_info_output
     self.provide_instance_id = provide_instance_id
     self.provide_coordinates_input = provide_coordinates_input
+    self.provide_coord_date_encoded_input = provide_coord_date_encoded_input
     self.preprocess_for_train = is_training and not use_eval_preprocess
     self.batch_drop_remainder = batch_drop_remainder
     self.seed = seed
@@ -75,6 +106,10 @@ class TFRecordWBBoxInputProcessor:
         'image/latitude':
             tf.io.FixedLenFeature((), tf.float32, default_value=0.0),
         'image/longitude':
+            tf.io.FixedLenFeature((), tf.float32, default_value=0.0),
+        'image/date':
+            tf.io.FixedLenFeature((), tf.float32, default_value=0.0),
+        'image/valid':
             tf.io.FixedLenFeature((), tf.float32, default_value=0.0),
         'image/filename':
             tf.io.FixedLenFeature((), tf.string, default_value=''),
@@ -92,9 +127,6 @@ class TFRecordWBBoxInputProcessor:
         'image/object/class/text': tf.io.VarLenFeature(tf.string),
         'image/object/class/label': tf.io.VarLenFeature(tf.int64),
     }
-    self.bbox_handler = slim_example_decoder.BoundingBox(
-                                             ['ymin', 'xmin', 'ymax', 'xmax'],
-                                             'image/object/bbox/')
 
   def make_source_dataset(self):
 
@@ -118,10 +150,6 @@ class TFRecordWBBoxInputProcessor:
       dataset = dataset.shuffle(FLAGS.suffle_buffer_size, seed=self.seed)
       dataset = dataset.repeat()
 
-    def _parse_bboxes(features):
-      keys_to_tensors = {key: features[key] for key in self.bbox_handler.keys}
-      return self.bbox_handler.tensors_to_item(keys_to_tensors)
-
     def _parse_label(features):
       labels = features['image/object/class/label']
       labels = tf.sparse.to_dense(labels)
@@ -137,41 +165,48 @@ class TFRecordWBBoxInputProcessor:
       features = tf.io.parse_single_example(example_proto,
                                             self.feature_description)
       image = tf.io.decode_jpeg(features['image/encoded'])
-      bboxes = _parse_bboxes(features)
       label = _parse_label(features)
       instance_id = features['image/source_id']
       latitude = features['image/latitude']
       longitude = features['image/longitude']
-      coordinates = tf.stack([latitude, longitude], 0)
+      date = features['image/date']
+      valid = features['image/valid']
 
-      return image, coordinates, bboxes, label, instance_id
-    dataset = dataset.map(_parse_single_example, num_parallel_calls=AUTOTUNE)
-
-    def _drop_coordinates(coordinates):
-      should_drop = tf.cast(tf.floor(tf.random.uniform(
-                                  [], seed=FLAGS.random_seed) + 0.5), tf.bool)
-      return tf.cond(should_drop,
-                     lambda: coordinates,
-                     lambda: tf.zeros(shape=coordinates.shape))
-
-    def _preprocess_image(image, coordinates, bboxes, label, instance_id):
       image = preprocessing.preprocess_image(image,
                     output_size=self.output_size,
                     is_training=self.preprocess_for_train,
                     resize_with_pad=self.resize_with_pad,
                     randaug_num_layers=self.randaug_num_layers,
                     randaug_magnitude=self.randaug_magnitude)
+
+      coordinates = tf.stack([latitude, longitude], 0)
       if self.is_training and FLAGS.use_coordinates_augment:
         coordinates = _drop_coordinates(coordinates)
-      return image, coordinates, bboxes, label, instance_id
-    dataset = dataset.map(_preprocess_image, num_parallel_calls=AUTOTUNE)
 
-    def _select_inputs_outputs(image, coordinates, _, label, instance_id):
-      inputs = (image, coordinates) if self.provide_coordinates_input else image
-      outputs = (label, instance_id) if self.provide_instance_id else label
+      if self.provide_coord_date_encoded_input:
+        lat = _encode_feat(latitude, FLAGS.loc_encode)
+        lon = _encode_feat(longitude, FLAGS.loc_encode)
+        if FLAGS.use_date_feats:
+          date = date*2.0 - 1.0
+          date = _encode_feat(date, FLAGS.date_encode)
+          coord_date_encoded = tf.concat([lon, lat, date], axis=0)
+        else:
+          coord_date_encoded = tf.concat([lon, lat], axis=0)
+        inputs = (image, coordinates, coord_date_encoded) \
+                  if self.provide_coordinates_input \
+                  else (image, coord_date_encoded)
+      else:
+        inputs = (image, coordinates) if self.provide_coordinates_input \
+                                      else image
+
+      if self.provide_validity_info_output:
+        outputs = (label, valid, instance_id) if self.provide_instance_id \
+                                              else (label, valid)
+      else:
+        outputs = (label, instance_id) if self.provide_instance_id else label
+
       return inputs, outputs
-    dataset = dataset.map(_select_inputs_outputs, num_parallel_calls=AUTOTUNE)
-
+    dataset = dataset.map(_parse_single_example, num_parallel_calls=AUTOTUNE)
     dataset = dataset.prefetch(buffer_size=AUTOTUNE)
     dataset = dataset.batch(self.batch_size,
                             drop_remainder=self.batch_drop_remainder)
@@ -180,3 +215,43 @@ class TFRecordWBBoxInputProcessor:
       dataset.take(1).repeat()
 
     return dataset, self.num_instances, self.num_classes
+
+
+class RandSpatioTemporalGenerator:
+  def __init__(self, rand_type='spherical'):
+    self.rand_type = rand_type
+
+  def _encode_feat(self, feat, encode):
+    if encode == 'encode_cos_sin':
+      feats = tf.concat([
+        tf.sin(math.pi*feat),
+        tf.cos(math.pi*feat)], axis=1)
+    else:
+      raise RuntimeError('%s not implemented' % encode)
+
+    return feats
+
+  def get_rand_samples(self, batch_size):
+    if self.rand_type == 'spherical':
+      rand_feats = tf.random.uniform(shape=(batch_size, 3),
+                                    dtype=tf.float32)
+      theta1 = 2.0*math.pi*rand_feats[:,0]
+      theta2 = tf.acos(2.0*rand_feats[:,1] - 1.0)
+      lat = 1.0 - 2.0*theta2/math.pi
+      lon = (theta1/math.pi) - 1.0
+      time = rand_feats[:,2]*2.0 - 1.0
+
+      lon = tf.expand_dims(lon, axis=-1)
+      lat = tf.expand_dims(lat, axis=-1)
+      time = tf.expand_dims(time, axis=-1)
+    else:
+      raise RuntimeError('%s rand type not implemented' % self.rand_type)
+
+    lon = self._encode_feat(lon, FLAGS.loc_encode)
+    lat = self._encode_feat(lat, FLAGS.loc_encode)
+    time = self._encode_feat(time, FLAGS.date_encode)
+
+    if FLAGS.use_date_feats:
+      return tf.concat([lon, lat, time], axis=1)
+    else:
+      return tf.concat([lon, lat], axis=1)
