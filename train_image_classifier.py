@@ -88,16 +88,6 @@ def train_model(model,
 
   callbacks = [summary_callback, checkpoint_callback]
 
-  if val_data is not None:
-    best_model_filepath = os.path.join(hparams.model_dir, 'best_model', 'ckp')
-    best_model_callback = tf.keras.callbacks.ModelCheckpoint(
-        filepath=best_model_filepath,
-        save_weights_only=True,
-        monitor='val_accuracy',
-        mode='max',
-        save_best_only=True)
-    callbacks.append(best_model_callback)
-
   if hparams.use_cosine_decay or hparams.warmup_steps > 0:
     callbacks.append(generate_lr_scheduler(hparams, steps_per_epoch))
 

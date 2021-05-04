@@ -14,17 +14,9 @@
 
 import collections
 
-from absl import flags
 import tensorflow as tf
 
 from utils import is_number
-
-FLAGS = flags.FLAGS
-
-flags.DEFINE_integer(
-    'unfreeze_layers', default=0,
-    help=('Number of layers to unfreeze at the end of the image base model '
-          ' when freezing it for fine-tuning.'))
 
 ModelSpecs = collections.namedtuple("ModelSpecs", [
     'name', 'func', 'input_size', 'classes', 'activation'
@@ -122,24 +114,25 @@ def _get_coordinates_base_model(seed=None):
 
   return coordinates_model
 
-def _create_model_from_specs(specs, model_name, freeze_layers,
-                             use_coordinates_inputs, seed=None):
+def _create_model_from_specs(specs, model_name, use_coordinates_inputs,
+                             unfreeze_layers=0, seed=None):
+  training = unfreeze_layers == -1
 
   image_input = tf.keras.Input(shape=(specs.input_size, specs.input_size, 3))
   base_model = _get_keras_base_model(specs, model_name)
-  base_model.trainable = not freeze_layers
-  if FLAGS.unfreeze_layers > 0:
-    for layer in base_model.layers[-FLAGS.unfreeze_layers:]:
+  base_model.trainable = training
+  if unfreeze_layers > 0:
+    for layer in base_model.layers[-unfreeze_layers:]:
       layer.trainable = True
 
-  x = base_model(image_input, training=not freeze_layers)
+  x = base_model(image_input, training=training)
   x = tf.keras.layers.GlobalAveragePooling2D()(x)
 
   if use_coordinates_inputs:
     coordinates_input = tf.keras.Input(shape=(2,))
     coordinates_model = _get_coordinates_base_model(seed)
-    coordinates_model.trainable = not freeze_layers
-    y = coordinates_model(coordinates_input, training=not freeze_layers)
+    coordinates_model.trainable = training
+    y = coordinates_model(coordinates_input, training=training)
     x = tf.keras.layers.concatenate([x, y])
     inputs = [image_input, coordinates_input]
   else:
@@ -157,7 +150,7 @@ def create(model_name,
            num_classes,
            input_size=None,
            classifier_activation="softmax",
-           freeze_layers=False,
+           unfreeze_layers=-1,
            use_coordinates_inputs=False,
            seed=None):
 
@@ -174,5 +167,5 @@ def create(model_name,
   if input_size is not None:
     specs = specs._replace(input_size=input_size)
 
-  return _create_model_from_specs(specs, model_name, freeze_layers,
-                                  use_coordinates_inputs, seed)
+  return _create_model_from_specs(specs, model_name, use_coordinates_inputs,
+                                  unfreeze_layers, seed)

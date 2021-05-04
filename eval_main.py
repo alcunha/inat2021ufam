@@ -103,7 +103,7 @@ def _load_model():
                             num_classes=FLAGS.num_classes,
                             input_size=FLAGS.input_size,
                             use_coordinates_inputs=FLAGS.use_coordinates_inputs,
-                            freeze_layers=True)
+                            unfreeze_layers=0)
 
   checkpoint_path = os.path.join(FLAGS.ckpt_dir, "ckp")
   model.load_weights(checkpoint_path)

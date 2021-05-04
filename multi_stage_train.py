@@ -56,6 +56,10 @@ flags.DEFINE_integer(
     'input_size', default=224,
     help=('Input size of the model'))
 
+flags.DEFINE_integer(
+    'input_size_stage3', default=260,
+    help=('Input size of the model on the stage 3 (fix train/test resolution)'))
+
 flags.DEFINE_float(
     'label_smoothing', default=0.1,
     help=('When 0, no smoothing occurs. When > 0, we apply Label Smoothing to'
@@ -91,8 +95,16 @@ flags.DEFINE_integer(
            'inferred from data'))
 
 flags.DEFINE_float(
-    'lr', default=0.01,
-    help=('Initial learning rate'))
+    'lr_stage1', default=0.1,
+    help=('Initial learning rate for stage 1'))
+
+flags.DEFINE_float(
+    'lr_stage2', default=0.1,
+    help=('Initial learning rate for stage 2'))
+
+flags.DEFINE_float(
+    'lr_stage3', default=0.008,
+    help=('Initial learning rate for stage 3'))
 
 flags.DEFINE_float(
     'momentum', default=0,
@@ -112,20 +124,21 @@ flags.DEFINE_float(
           ' fractionary value as long will be converted to steps.'))
 
 flags.DEFINE_integer(
-    'epochs', default=10,
-    help=('Number of epochs to training for'))
+    'epochs_stage1', default=4,
+    help=('Number of epochs to training during stage 1'))
 
-flags.DEFINE_bool(
-    'fix_resolution', default=False,
-    help=('Apply the fix train-test resolution: fine-tune only the last layer'
-          ' and uses test data augmentation. Use the --input_size option'
-          ' to specify the test input resolution.'))
+flags.DEFINE_integer(
+    'epochs_stage2', default=10,
+    help=('Number of epochs to training during stage 2'))
+
+flags.DEFINE_integer(
+    'epochs_stage3', default=2,
+    help=('Number of epochs to training during stage 3'))
 
 flags.DEFINE_integer(
     'unfreeze_layers', default=0,
     help=('Number of layers to unfreeze at the end of the image base model '
-          ' when freezing it for fine-tuning. Use -1 to make model full'
-          ' trainable.'))
+          ' during stage 3.'))
 
 flags.DEFINE_bool(
     'use_coordinates_inputs', default=False,
@@ -140,7 +153,11 @@ flags.mark_flag_as_required('training_files')
 flags.mark_flag_as_required('num_training_instances')
 flags.mark_flag_as_required('model_dir')
 
-def build_tfrecord_input_data(file_pattern, num_instances, is_training=False):
+def build_tfrecord_input_data(file_pattern,
+                              num_instances,
+                              input_size,
+                              is_training=False,
+                              use_eval_preprocess=False):
   if FLAGS.num_classes is None:
     raise RuntimeError('To use TFRecords as input, you must specify'
                        ' --num_classes')
@@ -151,8 +168,8 @@ def build_tfrecord_input_data(file_pattern, num_instances, is_training=False):
     num_classes=FLAGS.num_classes,
     num_instances=num_instances,
     is_training=is_training,
-    use_eval_preprocess=FLAGS.fix_resolution,
-    output_size=FLAGS.input_size,
+    use_eval_preprocess=use_eval_preprocess,
+    output_size=input_size,
     randaug_num_layers=FLAGS.randaug_num_layers,
     randaug_magnitude=FLAGS.randaug_magnitude,
     provide_coordinates_input=FLAGS.use_coordinates_inputs,
@@ -161,24 +178,27 @@ def build_tfrecord_input_data(file_pattern, num_instances, is_training=False):
 
   return input_data.make_source_dataset()
 
-def get_model(num_classes):
+def get_model(num_classes, input_size, unfreeze_layers):
   model = model_builder.create(
     model_name=FLAGS.model_name,
     num_classes=num_classes,
-    input_size=FLAGS.input_size,
-    unfreeze_layers=(FLAGS.unfreeze_layers if FLAGS.fix_resolution else -1),
+    input_size=input_size,
+    unfreeze_layers=unfreeze_layers,
     use_coordinates_inputs=FLAGS.use_coordinates_inputs,
-    seed=FLAGS.random_seed
-  )
+    seed=FLAGS.random_seed)
 
   return model
 
-def train_model(model, train_data_and_size, val_data_and_size, strategy):
+def train_model(model,
+                lr,
+                epochs,
+                model_dir,
+                train_data_and_size,
+                val_data_and_size,
+                strategy):
 
   if FLAGS.use_scaled_lr:
-    lr = FLAGS.lr * FLAGS.batch_size / 256
-  else:
-    lr = FLAGS.lr
+    lr = lr * FLAGS.batch_size / 256
 
   _, train_size = train_data_and_size
   warmup_steps = int(FLAGS.warmup_epochs * (train_size // FLAGS.batch_size))
@@ -187,11 +207,11 @@ def train_model(model, train_data_and_size, val_data_and_size, strategy):
   hparams = hparams._replace(
     lr=lr,
     momentum=FLAGS.momentum,
-    epochs=FLAGS.epochs,
+    epochs=epochs,
     warmup_steps=warmup_steps,
     use_cosine_decay=FLAGS.use_cosine_decay,
     batch_size=FLAGS.batch_size,
-    model_dir=FLAGS.model_dir,
+    model_dir=model_dir,
     label_smoothing=FLAGS.label_smoothing
   )
 
@@ -221,8 +241,8 @@ def main(_):
   dataset, num_instances, num_classes = build_tfrecord_input_data(
     FLAGS.training_files,
     FLAGS.num_training_instances,
-    is_training=True
-  )
+    FLAGS.input_size,
+    is_training=True)
 
   if FLAGS.validation_files is not None:
     if FLAGS.num_validation_instances is None:
@@ -232,8 +252,8 @@ def main(_):
     val_dataset, val_num_instances, _ = build_tfrecord_input_data(
       FLAGS.validation_files,
       FLAGS.num_validation_instances,
-      is_training=False
-    )
+      FLAGS.input_size,
+      is_training=False)
   else:
     val_dataset = None
     val_num_instances = 0
@@ -244,21 +264,67 @@ def main(_):
   strategy = tf.distribute.MirroredStrategy()
   print('Number of devices: {}'.format(strategy.num_replicas_in_sync))
 
+  # Stage 1 - we train only the classifier layer
   with strategy.scope():
-    model = get_model(num_classes)
-
+    model = get_model(num_classes, FLAGS.input_size, unfreeze_layers=0)
   model.summary()
-
   if FLAGS.load_checkpoint is not None:
     checkpoint_path = os.path.join(FLAGS.load_checkpoint, "ckp")
     model.load_weights(checkpoint_path)
+  train_model(model,
+              lr=FLAGS.lr_stage1,
+              epochs=FLAGS.epochs_stage1,
+              model_dir=os.path.join(FLAGS.model_dir, 'stage1'),
+              train_data_and_size=(dataset, num_instances),
+              val_data_and_size=(val_dataset, val_num_instances),
+              strategy=strategy)
 
-  history = train_model(
-    model,
-    train_data_and_size=(dataset, num_instances),
-    val_data_and_size=(val_dataset, val_num_instances),
-    strategy=strategy
-  )
+  # Stage 2 - we fine tune all layers
+  with strategy.scope():
+    model = get_model(num_classes, FLAGS.input_size, unfreeze_layers=-1)
+  model.summary()
+  checkpoint_path = os.path.join(FLAGS.model_dir, 'stage1', "ckp")
+  model.load_weights(checkpoint_path)
+  train_model(model,
+              lr=FLAGS.lr_stage2,
+              epochs=FLAGS.epochs_stage2,
+              model_dir=os.path.join(FLAGS.model_dir, 'stage2'),
+              train_data_and_size=(dataset, num_instances),
+              val_data_and_size=(val_dataset, val_num_instances),
+              strategy=strategy)
+
+  # Stage 3 - we fine tune the last N layers and use higher input size; we use
+  # the evaluation preprocessing of images during training
+  dataset, _, _ = build_tfrecord_input_data(
+    FLAGS.training_files,
+    FLAGS.num_training_instances,
+    FLAGS.input_size_stage3,
+    is_training=True,
+    use_eval_preprocess=True)
+
+  if FLAGS.validation_files is not None:
+    val_dataset, _, _ = build_tfrecord_input_data(
+      FLAGS.validation_files,
+      FLAGS.num_validation_instances,
+      FLAGS.input_size_stage3,
+      is_training=False,
+      use_eval_preprocess=True)
+  else:
+    val_dataset = None
+  with strategy.scope():
+    model = get_model(num_classes,
+                      FLAGS.input_size_stage3,
+                      unfreeze_layers=FLAGS.unfreeze_layers)
+  model.summary()
+  checkpoint_path = os.path.join(FLAGS.model_dir, 'stage2', "ckp")
+  model.load_weights(checkpoint_path)
+  train_model(model,
+              lr=FLAGS.lr_stage3,
+              epochs=FLAGS.epochs_stage3,
+              model_dir=FLAGS.model_dir,
+              train_data_and_size=(dataset, num_instances),
+              val_data_and_size=(val_dataset, val_num_instances),
+              strategy=strategy)
 
 if __name__ == '__main__':
   app.run(main)
