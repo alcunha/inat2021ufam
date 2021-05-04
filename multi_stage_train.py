@@ -89,6 +89,11 @@ flags.DEFINE_string(
     'load_checkpoint', default=None,
     help=('Path to weights checkpoint to be loaded into the model'))
 
+flags.DEFINE_string(
+    'base_model_weights', default='imagenet',
+    help=('Path to h5 weights file to be loaded into the base model during'
+          ' model build procedure.'))
+
 flags.DEFINE_integer(
     'num_classes', default=None,
     help=('Number of classes to train the model on. If not passed, it will be'
@@ -185,6 +190,7 @@ def get_model(num_classes, input_size, unfreeze_layers):
     input_size=input_size,
     unfreeze_layers=unfreeze_layers,
     use_coordinates_inputs=FLAGS.use_coordinates_inputs,
+    base_model_weights=FLAGS.base_model_weights,
     seed=FLAGS.random_seed)
 
   return model
