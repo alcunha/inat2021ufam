@@ -115,7 +115,8 @@ def _get_coordinates_base_model(seed=None):
   return coordinates_model
 
 def _create_model_from_specs(specs, model_name, use_coordinates_inputs,
-                             unfreeze_layers=0, seed=None):
+                             unfreeze_layers=0, return_base_model=False,
+                             seed=None):
   training = unfreeze_layers == -1
 
   image_input = tf.keras.Input(shape=(specs.input_size, specs.input_size, 3))
@@ -144,6 +145,9 @@ def _create_model_from_specs(specs, model_name, use_coordinates_inputs,
       kernel_initializer=tf.keras.initializers.glorot_uniform(seed))(x)
   model = tf.keras.models.Model(inputs=inputs, outputs=[outputs])
 
+  if return_base_model:
+    return model, base_model
+
   return model
 
 def create(model_name,
@@ -152,6 +156,7 @@ def create(model_name,
            classifier_activation="softmax",
            unfreeze_layers=-1,
            use_coordinates_inputs=False,
+           return_base_model=False,
            seed=None):
 
   model_name_base = model_name.split('_')[0]
@@ -168,4 +173,4 @@ def create(model_name,
     specs = specs._replace(input_size=input_size)
 
   return _create_model_from_specs(specs, model_name, use_coordinates_inputs,
-                                  unfreeze_layers, seed)
+                                  unfreeze_layers, return_base_model, seed)
