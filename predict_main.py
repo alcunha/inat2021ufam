@@ -55,6 +55,11 @@ flags.DEFINE_string(
     'ckpt_dir', default=None,
     help=('Location of the model checkpoint files'))
 
+flags.DEFINE_bool(
+    'use_tta', default=False,
+    help=('Use test time augmentation (6-crop: full, left-up, right-down and'
+          ' theirs flip version) for image prediction'))
+
 flags.DEFINE_string(
     'test_files', default=None,
     help=('A file pattern for TFRecord files'))
@@ -107,6 +112,15 @@ def _load_model():
   checkpoint_path = os.path.join(FLAGS.ckpt_dir, "ckp")
   model.load_weights(checkpoint_path)
 
+  if FLAGS.use_tta:
+    inputs = [tf.keras.Input(shape=(FLAGS.input_size, FLAGS.input_size, 3))
+              for x in range(6)]
+    outputs = [model(img_input, training=False) for img_input in inputs]
+    outputs = tf.keras.layers.Average()(outputs)
+
+    tta_model = tf.keras.models.Model(inputs=inputs, outputs=[outputs])
+    model = tta_model
+
   return model
 
 def _load_geo_prior_model():
@@ -141,6 +155,7 @@ def build_input_data():
     provide_validity_info_output=include_geo_data,
     provide_coord_date_encoded_input=include_geo_data,
     provide_instance_id=True,
+    use_tta=FLAGS.use_tta,
     provide_coordinates_input=FLAGS.use_coordinates_inputs
   )
 

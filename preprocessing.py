@@ -142,7 +142,34 @@ def preprocess_for_train(image,
 
   return image
 
-def preprocess_for_eval(image, output_size, resize_with_pad=False):
+def test_time_augmentation(image, tta_mode):
+  image_height = tf.shape(image)[0]
+  image_width = tf.shape(image)[1]
+  crop_size = tf.minimum(image_height, image_width)
+
+  if tta_mode == 'leftup':
+    offset_height = 0
+    offset_width = 0
+  elif tta_mode == 'rightdown':
+    offset_height = image_height - crop_size
+    offset_width = image_width - crop_size
+  else:
+    raise RuntimeError('%s mode not implemented' % tta_mode)
+
+  target_height = crop_size
+  target_width = crop_size
+
+  image = tf.image.crop_to_bounding_box(image,
+                                        offset_height,
+                                        offset_width,
+                                        target_height,
+                                        target_width)
+
+  return image
+
+def preprocess_for_eval(image, output_size, resize_with_pad=False, tta=None):
+  if tta is not None:
+    image = test_time_augmentation(image, tta)
 
   if output_size is not None:
     image = resize_image(image, output_size, resize_with_pad)
@@ -157,6 +184,7 @@ def preprocess_image(image,
                      resize_with_pad=False,
                      randaug_num_layers=None,
                      randaug_magnitude=None,
+                     tta=None,
                      seed=None):
   if is_training:
     return preprocess_for_train(image,
@@ -166,4 +194,4 @@ def preprocess_image(image,
                                 randaug_magnitude,
                                 seed)
   else:
-    return preprocess_for_eval(image, output_size, resize_with_pad)
+    return preprocess_for_eval(image, output_size, resize_with_pad, tta)

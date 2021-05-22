@@ -70,6 +70,7 @@ class TFRecordWBBoxInputProcessor:
               default_empty_label=0,
               is_training=False,
               use_eval_preprocess=False,
+              use_tta=False,
               output_size=224,
               resize_with_pad=False,
               randaug_num_layers=None,
@@ -97,6 +98,7 @@ class TFRecordWBBoxInputProcessor:
     self.provide_coordinates_input = provide_coordinates_input
     self.provide_coord_date_encoded_input = provide_coord_date_encoded_input
     self.preprocess_for_train = is_training and not use_eval_preprocess
+    self.use_tta = use_tta
     self.batch_drop_remainder = batch_drop_remainder
     self.seed = seed
 
@@ -161,6 +163,27 @@ class TFRecordWBBoxInputProcessor:
 
       return label
 
+    def _image_tta(image):
+      rescale = preprocessing.preprocess_image(image,
+                      output_size=self.output_size,
+                      is_training=False,
+                      resize_with_pad=self.resize_with_pad)
+      rescale_flip = tf.image.flip_left_right(rescale)
+      leftup = preprocessing.preprocess_image(image,
+                      output_size=self.output_size,
+                      is_training=False,
+                      resize_with_pad=self.resize_with_pad,
+                      tta='leftup')
+      leftup_flip = tf.image.flip_left_right(leftup)
+      rightdown = preprocessing.preprocess_image(image,
+                      output_size=self.output_size,
+                      is_training=False,
+                      resize_with_pad=self.resize_with_pad,
+                      tta='rightdown')
+      rightdown_flip =  tf.image.flip_left_right(rightdown)
+      return (rescale, rescale_flip, leftup, leftup_flip, rightdown, \
+               rightdown_flip)
+
     def _parse_single_example(example_proto):
       features = tf.io.parse_single_example(example_proto,
                                             self.feature_description)
@@ -172,12 +195,15 @@ class TFRecordWBBoxInputProcessor:
       date = features['image/date']
       valid = features['image/valid']
 
-      image = preprocessing.preprocess_image(image,
-                    output_size=self.output_size,
-                    is_training=self.preprocess_for_train,
-                    resize_with_pad=self.resize_with_pad,
-                    randaug_num_layers=self.randaug_num_layers,
-                    randaug_magnitude=self.randaug_magnitude)
+      if self.use_tta:
+        image = _image_tta(image)
+      else:
+        image = preprocessing.preprocess_image(image,
+                      output_size=self.output_size,
+                      is_training=self.preprocess_for_train,
+                      resize_with_pad=self.resize_with_pad,
+                      randaug_num_layers=self.randaug_num_layers,
+                      randaug_magnitude=self.randaug_magnitude)
 
       coordinates = tf.stack([latitude, longitude], 0)
       if self.is_training and FLAGS.use_coordinates_augment:
