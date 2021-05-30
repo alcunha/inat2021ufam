@@ -76,8 +76,8 @@ python predict_main.py --test_files=PATH_TO_BE_CONFIGURED/inat_public_test.recor
 
 ### Results
 
-Efficientnet-B3 was trained on iNat2021 train set, inference using input of 432x432.
-Geo Prior model was trained using coordinates and date info from iNat2021 train set.
+[Efficientnet-B3](https://drive.google.com/file/d/1SDx5P-ovb1NQPyPu4ubgsOhttUEdzs4A/view?usp=sharing) was trained on iNat2021 train set, inference using input of 432x432.
+[Geo Prior](https://drive.google.com/file/d/1xzYaouGOZQrbibHbTMUs4d8PZZYDnZXT/view?usp=sharing) model was trained using coordinates and date info from iNat2021 train set.
 
 | Model name                        | Private Score |
 |-----------------------------------|---------------|
