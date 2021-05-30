@@ -54,6 +54,10 @@ python multi_stage_train.py --flagfile=configs/efficientnet_b3_final_submission_
 
 For more parameter information, please refer to `multi_stage_train.py` or `main.py`. See `configs` folder for some training configs examples.
 
+#### Training Geo Prior Model
+
+To train geo prior model used on our final submission please see our [TF implementation](https://github.com/alcunha/geo_prior_tf/).
+
 ### Prediction
 
 To create a submission for the competition use script `predict_main.py`:
@@ -72,7 +76,14 @@ python predict_main.py --test_files=PATH_TO_BE_CONFIGURED/inat_public_test.recor
 
 ### Results
 
+Efficientnet-B3 was trained on iNat2021 train set, inference using input of 432x432.
+Geo Prior model was trained using coordinates and date info from iNat2021 train set.
 
+| Model name                        | Private Score |
+|-----------------------------------|---------------|
+| Efficientnet-B3                   | 0.16756       |
+| Efficientnet-B3 + Geo Prior       | 0.10752       |
+| Efficientnet-B3 + Geo Prior + TTA | 0.09894       |
 
 ### Contact
 
